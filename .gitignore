@@ -1,0 +1,17 @@
+# Python / venv / caches (never commit these)
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Local runtime data: real user data, uploads and the dev database
+# must not be pushed to a public repo
+data/
+uploads/
+*.db
+*.sqlite3
+
+# OS / editor noise
+.DS_Store
+.idea/
+.vscode/
