@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
 
 abstract final class YunoColors {
-  static const ink = Color(0xff243b32);
-  static const muted = Color(0xff778078);
-  static const paper = Color(0xfff8f8f4);
-  static const sage = Color(0xffeaf0e7);
-  static const line = Color(0xffe5e8e1);
+  static const primary = Color(0xff006e5b);
+  static const ink = Color(0xff182622);
+  static const muted = Color(0xff72807a);
+  static const paper = Color(0xfff2f5f4);
+  static const sage = Color(0xffdeeee8);
+  static const line = Color(0xffd9dfdc);
 }
 
 ThemeData yunoTheme() {
@@ -16,8 +17,8 @@ ThemeData yunoTheme() {
   return ThemeData(
     useMaterial3: true,
     colorScheme: ColorScheme.fromSeed(
-      seedColor: const Color(0xff345b47),
-      primary: YunoColors.ink,
+      seedColor: YunoColors.primary,
+      primary: YunoColors.primary,
       surface: Colors.white,
       onSurface: YunoColors.ink,
       outline: YunoColors.line,
@@ -43,7 +44,9 @@ ThemeData yunoTheme() {
       color: Colors.white,
       elevation: 0,
       margin: const EdgeInsets.only(bottom: 12),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(14),
+          side: const BorderSide(color: YunoColors.line)),
     ),
     filledButtonTheme: FilledButtonThemeData(
       style: FilledButton.styleFrom(
@@ -66,20 +69,33 @@ ThemeData yunoTheme() {
       subtitleTextStyle: TextStyle(fontSize: 12, color: YunoColors.muted),
     ),
     navigationBarTheme: NavigationBarThemeData(
-      height: 68,
+      height: 64,
       backgroundColor: Colors.white,
       surfaceTintColor: Colors.transparent,
-      indicatorColor: YunoColors.sage,
+      indicatorColor: Colors.transparent,
       labelTextStyle: WidgetStateProperty.resolveWith((states) => TextStyle(
             fontSize: 10,
             color: states.contains(WidgetState.selected)
-                ? YunoColors.ink
+                ? YunoColors.primary
                 : YunoColors.muted,
             fontWeight: states.contains(WidgetState.selected)
                 ? FontWeight.w600
                 : FontWeight.w400,
           )),
-      iconTheme: WidgetStateProperty.all(const IconThemeData(size: 22)),
+      iconTheme: WidgetStateProperty.resolveWith((states) => IconThemeData(
+          size: 21,
+          color: states.contains(WidgetState.selected)
+              ? YunoColors.primary
+              : YunoColors.muted)),
+    ),
+    chipTheme: ChipThemeData(
+      backgroundColor: Colors.white,
+      selectedColor: YunoColors.primary,
+      showCheckmark: false,
+      side: const BorderSide(color: YunoColors.line),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+      labelStyle: const TextStyle(fontSize: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 2),
     ),
     dividerTheme: const DividerThemeData(color: YunoColors.line, thickness: 1),
     bottomSheetTheme: const BottomSheetThemeData(

@@ -99,6 +99,124 @@ void main() {
       expect(tester.takeException(), isNull);
     }
   });
+  testWidgets('reference search and wrapping category chips send real filters',
+      (tester) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final requests = <Uri>[];
+    session.config['categories'] = [
+      {'slug': 'watch', 'name_zh': '手表', 'name_ja': '時計'},
+      {'slug': 'camera', 'name_zh': '相机', 'name_ja': 'カメラ'},
+    ];
+    session.client = MockClient((request) async {
+      requests.add(request.url);
+      return http.Response('{"items":[]}', 200);
+    });
+    await tester
+        .pumpWidget(MaterialApp(theme: yunoTheme(), home: const HomeShell()));
+    await tester.pumpAndSettle();
+    expect(find.byType(BrandHeader), findsOneWidget);
+    await tester.enterText(find.byType(TextField).first, 'Sony');
+    await tester.tap(find.text('搜索'));
+    await tester.pumpAndSettle();
+    expect(requests.last.queryParameters['q'], 'Sony');
+    await tester.tap(find.text('相机'));
+    await tester.pumpAndSettle();
+    expect(requests.last.queryParameters['category'], 'camera');
+    expect(requests.last.queryParameters['q'], 'Sony');
+    expect(tester.takeException(), isNull);
+  });
+  testWidgets('trade grid changes actual bottom destination', (tester) async {
+    await tester
+        .pumpWidget(MaterialApp(theme: yunoTheme(), home: const HomeShell()));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(NavigationDestination).at(2));
+    await tester.pumpAndSettle();
+    expect(find.text('拍照发布 · AI 一键估价'), findsOneWidget);
+    await tester.tap(find.text('我要买'));
+    await tester.pumpAndSettle();
+    expect(
+        tester.widget<NavigationBar>(find.byType(NavigationBar)).selectedIndex,
+        0);
+    expect(find.text('搜索'), findsOneWidget);
+  });
+  testWidgets('order filters and personal favorites use account data',
+      (tester) async {
+    final favorite = {
+      'id': 9,
+      'title_zh': '收藏的相机',
+      'price': 12000,
+      'photos': [],
+      'condition_grade': 'good'
+    };
+    session.client = MockClient((r) async {
+      final data = switch (r.url.path.split('/').last) {
+        'login' => {'access_token': 'widget-test-only-token'},
+        'me' => {
+            'id': 1,
+            'display_name': 'Test',
+            'following': [favorite]
+          },
+        'orders' => {
+            'items': [
+              {
+                'id': 1,
+                'status': 'pending_payment',
+                'total': 12000,
+                'listing': {'title_zh': '待支付相机', 'photos': []}
+              },
+              {
+                'id': 2,
+                'status': 'completed',
+                'total': 5000,
+                'listing': {'title_zh': '已完成手表', 'photos': []}
+              },
+            ]
+          },
+        _ => {'items': []},
+      };
+      return http.Response(jsonEncode(data), 200,
+          headers: {'content-type': 'application/json'});
+    });
+    await session.authenticate(false, {});
+    await tester
+        .pumpWidget(MaterialApp(theme: yunoTheme(), home: const HomeShell()));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(NavigationDestination).at(3));
+    await tester.pumpAndSettle();
+    expect(find.text('待支付相机'), findsOneWidget);
+    expect(find.text('已完成手表'), findsOneWidget);
+    await tester.tap(find.widgetWithText(ChoiceChip, '待模拟支付'));
+    await tester.pumpAndSettle();
+    expect(find.text('待支付相机'), findsOneWidget);
+    expect(find.text('已完成手表'), findsNothing);
+    await tester.tap(find.byType(NavigationDestination).at(4));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('我的收藏'));
+    await tester.pumpAndSettle();
+    expect(find.text('收藏的相机'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+  testWidgets('header language changes all five destination labels immediately',
+      (tester) async {
+    SharedPreferences.setMockInitialValues({'language': 'zh'});
+    session.client = MockClient((r) async => http.Response(
+        jsonEncode(
+            {'categories': [], 'regions': [], 'services': {}, 'items': []}),
+        200,
+        headers: {'content-type': 'application/json'}));
+    await tester.pumpWidget(const YunoApp());
+    await tester.pumpAndSettle();
+    expect(find.text('市场'), findsOneWidget);
+    await tester.tap(find.text('日本語'));
+    await tester.pumpAndSettle();
+    expect(find.text('市場'), findsOneWidget);
+    expect(find.text('市场'), findsNothing);
+    expect(find.text('マイページ'), findsOneWidget);
+    expect(session.preferences!.getString('language'), 'ja');
+  });
   testWidgets(
       'login is a native password form and empty accounts are not prefilled',
       (tester) async {

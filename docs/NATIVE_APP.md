@@ -102,3 +102,10 @@ flutter drive --profile --keep-app-running --no-uninstall-first \
 
 最终结果见 [NATIVE_ACCEPTANCE.md](NATIVE_ACCEPTANCE.md)。真实收款、真实物流、
 付费模型与商店上架均不在范围内。原后端 CSRF、图片审核等遗留边界仍见根 README。
+
+
+## 当前界面版本
+
+原生界面已按用户给定 Muse 参考更新为 0.3.0（4），对照及真机截图见
+[NATIVE_UI_0_3.md](NATIVE_UI_0_3.md)。`GET /me` 额外返回当前用户的 `following` 商品列表；
+订单读取中的 `listing` 字段包含商品标题与照片，便于原生订单卡片展示。以上均为读取扩展。

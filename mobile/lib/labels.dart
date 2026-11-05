@@ -134,4 +134,9 @@ String status(Session s, dynamic value) {
   return pair == null ? text : s.tr(pair[0], pair[1]);
 }
 
-String yen(dynamic n) => n == null ? '—' : '¥$n';
+String yen(dynamic n) {
+  if (n == null) return '—';
+  final value =
+      '$n'.replaceAllMapped(RegExp(r'\B(?=(\d{3})+(?!\d))'), (_) => ',');
+  return '¥$value';
+}

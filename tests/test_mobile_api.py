@@ -80,7 +80,12 @@ def test_fixed_trade_review_refund_and_permissions():
     lid=s.listing()
     data=b.get(f'/listings/{lid}')
     assert data['actions'] and data['category']['slug']=='appliance'
+    b.post(f'/listings/{lid}/follow')
+    assert b.get('/me')['following'][0]['id']==lid
+    assert o.get('/me')['following']==[]
     oid=int(b.post(f'/listings/{lid}/buy')['next'].split('/')[-1])
+    assert b.get('/orders')['items'][0]['listing']['id']==lid
+    assert o.get('/orders')['items']==[]
     assert o.client.get(f'/api/v1/orders/{oid}',headers=o.headers).status_code==403
     b.post(f'/orders/{oid}/pay',{'idempotency_key':'api-test'})
     b.post(f'/orders/{oid}/pay',{'idempotency_key':'api-test'})

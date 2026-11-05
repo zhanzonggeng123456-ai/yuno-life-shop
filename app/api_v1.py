@@ -165,6 +165,10 @@ def me(request:Request):
         for table,where in [('orders','buyer_id=? OR seller_id=?'),('buybacks','seller_id=?'),('service_orders','user_id=?'),('oneclick_drafts','user_id=?')]:
             args=(u['id'],u['id']) if table=='orders' else (u['id'],)
             out[table]=[clean(r) for r in c.execute(f'SELECT * FROM {table} WHERE {where} ORDER BY id DESC',args)]
+        out['following']=[listing(c,r) for r in c.execute('SELECT l.* FROM listings l JOIN listing_follows f ON f.listing_id=l.id WHERE f.user_id=? ORDER BY f.id DESC',(u['id'],))]
+        for order in out['orders']:
+            row=c.execute('SELECT * FROM listings WHERE id=?',(order['listing_id'],)).fetchone()
+            order['listing']=listing(c,row) if row else None
         out['offers']=[clean(r) for r in c.execute('SELECT o.* FROM offers o JOIN listings l ON l.id=o.listing_id WHERE o.buyer_id=? OR l.seller_id=? ORDER BY o.id DESC',(u['id'],u['id']))]
         out['threads']=[dict(r) for r in c.execute('SELECT DISTINCT m.listing_id,m.buyer_id,l.title_ja,l.title_zh FROM messages m JOIN listings l ON l.id=m.listing_id WHERE m.buyer_id=? OR l.seller_id=?',(u['id'],u['id']))]
         out['deliveries']=[clean(r) for r in c.execute('SELECT dl.* FROM deliveries dl JOIN orders o ON o.id=dl.order_id WHERE o.buyer_id=? OR o.seller_id=? OR dl.courier_id=? ORDER BY dl.id DESC',(u['id'],u['id'],u['id']))]

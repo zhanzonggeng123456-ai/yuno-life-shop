@@ -131,13 +131,13 @@ Future<bool> ensureLogin(BuildContext context) async {
 }
 
 Widget heading(String title, {String? subtitle}) => Padding(
-      padding: const EdgeInsets.only(bottom: 20),
+      padding: const EdgeInsets.only(bottom: 12),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
             title,
-            style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w700),
+            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
           ),
           if (subtitle != null)
             Text(subtitle, style: TextStyle(color: Colors.grey.shade700)),
@@ -200,58 +200,182 @@ class HomeShell extends StatefulWidget {
 class _HomeShellState extends State<HomeShell> {
   int tab = 0;
   @override
-  Widget build(BuildContext context) => Scaffold(
-        body: SafeArea(
-          child: KeyedSubtree(
-            key: ValueKey('$tab-${session.language}-${session.signedIn}'),
-            child: [
-              const MarketPage(),
-              const TrendsPage(),
-              const TradePage(),
-              const AccountListPage(kind: 'orders'),
-              const ProfilePage(),
-            ][tab],
-          ),
-        ),
-        bottomNavigationBar: DecoratedBox(
-          decoration: const BoxDecoration(
-              border: Border(top: BorderSide(color: YunoColors.line))),
-          child: NavigationBar(
-            selectedIndex: tab,
-            onDestinationSelected: (i) => setState(() => tab = i),
-            destinations: [
-              NavigationDestination(
-                icon: const Icon(Icons.storefront_outlined),
-                label: session.tr('市场', '市場'),
+  Widget build(BuildContext context) => AnimatedBuilder(
+      animation: session,
+      builder: (context, _) => Scaffold(
+            body: SafeArea(
+              child: Column(children: [
+                const BrandHeader(),
+                Expanded(
+                    child: KeyedSubtree(
+                  key: ValueKey('$tab-${session.language}-${session.signedIn}'),
+                  child: [
+                    const MarketPage(),
+                    const TrendsPage(),
+                    TradePage(
+                        onMarket: () => setState(() => tab = 0),
+                        onOrders: () => setState(() => tab = 3)),
+                    const OrdersPage(),
+                    const ProfilePage(),
+                  ][tab],
+                )),
+              ]),
+            ),
+            bottomNavigationBar: DecoratedBox(
+              decoration: const BoxDecoration(
+                  border: Border(top: BorderSide(color: YunoColors.line))),
+              child: NavigationBar(
+                selectedIndex: tab,
+                onDestinationSelected: (i) => setState(() => tab = i),
+                destinations: [
+                  NavigationDestination(
+                    icon: const Icon(Icons.storefront_outlined),
+                    label: session.tr('市场', '市場'),
+                  ),
+                  NavigationDestination(
+                    icon: const Icon(Icons.insights_outlined),
+                    label: session.tr('成交行情', '相場'),
+                  ),
+                  NavigationDestination(
+                    icon: const Icon(Icons.shopping_cart_outlined),
+                    label: session.tr('交易', '取引'),
+                  ),
+                  NavigationDestination(
+                    icon: const Icon(Icons.receipt_long_outlined),
+                    label: session.tr('订单', '注文'),
+                  ),
+                  NavigationDestination(
+                    icon: const Icon(Icons.person_outline),
+                    label: session.tr('个人中心', 'マイページ'),
+                  ),
+                ],
               ),
-              NavigationDestination(
-                icon: const Icon(Icons.insights_outlined),
-                label: session.tr('成交行情', '相場'),
-              ),
-              NavigationDestination(
-                icon: Container(
-                  width: 38,
-                  height: 32,
-                  decoration: BoxDecoration(
-                      color: YunoColors.ink,
-                      borderRadius: BorderRadius.circular(12)),
-                  child: const Icon(Icons.add, color: Colors.white, size: 23),
-                ),
-                label: session.tr('交易', '取引'),
-              ),
-              NavigationDestination(
-                icon: const Icon(Icons.receipt_long_outlined),
-                label: session.tr('订单', '注文'),
-              ),
-              NavigationDestination(
-                icon: const Icon(Icons.person_outline),
-                label: session.tr('个人中心', 'マイページ'),
-              ),
-            ],
-          ),
-        ),
+            ),
+          ));
+}
+
+class BrandHeader extends StatelessWidget {
+  const BrandHeader({super.key});
+  @override
+  Widget build(BuildContext context) => Container(
+        width: double.infinity,
+        padding: const EdgeInsets.fromLTRB(14, 12, 14, 10),
+        decoration: const BoxDecoration(
+            color: Colors.white,
+            border: Border(bottom: BorderSide(color: YunoColors.line))),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Wrap(
+              spacing: 8,
+              runSpacing: 6,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                const Text('Yuno Life',
+                    style: TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.w800,
+                        color: YunoColors.primary,
+                        letterSpacing: -0.7)),
+                badge(session.tr('坂戸市 · 埼玉', '坂戸市・埼玉')),
+                badge(session.tr('模拟交易试用', '模擬取引・試用'), warning: true),
+              ]),
+          const SizedBox(height: 9),
+          Align(
+              alignment: Alignment.centerRight,
+              child: Container(
+                padding: const EdgeInsets.all(3),
+                decoration: BoxDecoration(
+                    color: const Color(0xffedf1ef),
+                    borderRadius: BorderRadius.circular(24)),
+                child: Row(mainAxisSize: MainAxisSize.min, children: [
+                  for (final entry in [
+                    ['ja', '日本語'],
+                    ['zh', '中文'],
+                    ['system', session.tr('系统', '自動')]
+                  ])
+                    Semantics(
+                        selected: session.language == entry[0],
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(20),
+                          onTap: () => session.setLanguage(entry[0]),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 11, vertical: 6),
+                            decoration: BoxDecoration(
+                                color: session.language == entry[0]
+                                    ? Colors.white
+                                    : Colors.transparent,
+                                borderRadius: BorderRadius.circular(20)),
+                            child: Text(entry[1],
+                                style: const TextStyle(
+                                    fontSize: 12, fontWeight: FontWeight.w600)),
+                          ),
+                        )),
+                ]),
+              )),
+          const SizedBox(height: 8),
+          Wrap(spacing: 12, runSpacing: 4, children: [
+            Text(session.tr('本地二手交易 · 坂户市起步', '地域のリユース・坂戸市から'),
+                style: const TextStyle(fontSize: 11, color: YunoColors.muted)),
+            Text(
+                '${session.tr('佣金 ', '手数料 ')}${((num.tryParse("${session.config['commission_rate']}") ?? 0.1) * 100).toStringAsFixed(0)}%${session.tr('（后台可调 7–10%）', '（7–10%で調整）')}',
+                style: const TextStyle(fontSize: 11, color: YunoColors.muted)),
+          ]),
+        ]),
       );
 }
+
+Widget badge(String text, {bool warning = false}) => Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+          color: warning ? const Color(0xfffff2db) : const Color(0xffedf1ef),
+          borderRadius: BorderRadius.circular(20)),
+      child: Text(text,
+          style: TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.w600,
+              color: warning ? const Color(0xffa86c22) : YunoColors.muted)),
+    );
+
+String regionLabel(dynamic code) {
+  for (final r in session.config['regions'] ?? []) {
+    if (r['code'] == code) return session.name(Map<String, dynamic>.from(r));
+  }
+  return '$code';
+}
+
+String categoryLabel(Json category) {
+  const short = {
+    'furniture': ['家具家居', '家具'],
+    'appliance': ['家电', '家電'],
+    'digital': ['手机数码', 'スマホ・デジタル'],
+    'watch': ['手表', '時計'],
+    'coin': ['钱币收藏', 'コイン'],
+    'figure': ['模型玩具', '模型・玩具'],
+    'camera': ['相机', 'カメラ'],
+    'antique': ['古董艺术', '骨董・美術'],
+    'instrument': ['乐器音响', '楽器・音響'],
+    'book': ['书籍媒体', '本・メディア'],
+    'fashion': ['服饰箱包', '服・バッグ'],
+    'tool': ['工具运动户外', '工具・アウトドア'],
+    'other': ['其他', 'その他'],
+  };
+  final pair = short[category['slug']];
+  return pair == null ? session.name(category) : session.tr(pair[0], pair[1]);
+}
+
+Widget filterChip(String label, bool selected, VoidCallback onTap) =>
+    ChoiceChip(
+      label: Text(label),
+      selected: selected,
+      showCheckmark: false,
+      labelStyle: TextStyle(
+          fontSize: 12, color: selected ? Colors.white : YunoColors.ink),
+      selectedColor: YunoColors.primary,
+      backgroundColor: Colors.white,
+      side: BorderSide(color: selected ? YunoColors.primary : YunoColors.line),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+      onSelected: (_) => onTap(),
+    );
 
 class PageFrame extends StatelessWidget {
   final String title;
@@ -383,233 +507,154 @@ class _MarketPageState extends State<MarketPage> {
         builder: (context, data, reload) {
           final items = List<Json>.from(data['items']);
           return ListView(
-            padding: const EdgeInsets.all(20),
+            padding: const EdgeInsets.all(14),
             children: [
               Row(children: [
-                Container(
-                    width: 36,
-                    height: 36,
-                    decoration: BoxDecoration(
-                        color: YunoColors.ink,
-                        borderRadius: BorderRadius.circular(12)),
-                    alignment: Alignment.center,
-                    child: const Text('y',
-                        style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 29,
-                            height: 1,
-                            fontFamily: 'Georgia'))),
-                const SizedBox(width: 10),
-                const Text('Yuno Life',
-                    style: TextStyle(
-                        fontSize: 23,
-                        fontWeight: FontWeight.w600,
-                        letterSpacing: -0.8)),
-                const Spacer(),
-                const Icon(Icons.location_on_outlined,
-                    size: 14, color: YunoColors.muted),
-                const SizedBox(width: 3),
-                Text(session.tr('坂户市', '坂戸市'),
-                    style:
-                        const TextStyle(fontSize: 12, color: YunoColors.muted)),
-              ]),
-              const SizedBox(height: 22),
-              TextField(
-                controller: query,
-                onSubmitted: (_) => setState(() => version++),
-                decoration: InputDecoration(
-                  prefixIcon: const Icon(Icons.search),
-                  hintText: session.tr('寻找下一件心动好物', '次のお気に入りを見つける'),
-                  hintStyle:
-                      const TextStyle(fontSize: 14, color: YunoColors.muted),
-                  suffixIcon: IconButton(
-                    icon: const Icon(Icons.tune),
-                    onPressed: () async {
-                      await showModalBottomSheet(
-                        context: context,
-                        isScrollControlled: true,
-                        builder: (context) => StatefulBuilder(
-                          builder: (context, setModal) => Padding(
-                            padding: EdgeInsets.fromLTRB(
-                              20,
-                              24,
-                              20,
-                              MediaQuery.viewInsetsOf(context).bottom + 24,
-                            ),
-                            child: SingleChildScrollView(
-                              child: Column(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  DropdownButtonFormField<String>(
-                                    initialValue: category,
-                                    items: [
-                                      DropdownMenuItem(
-                                        value: '',
-                                        child: Text(
-                                            session.tr('全部分类', 'すべてのカテゴリ')),
-                                      ),
-                                      for (final c
-                                          in session.config['categories'] ?? [])
+                Expanded(
+                    child: TextField(
+                  controller: query,
+                  onSubmitted: (_) => setState(() => version++),
+                  decoration: InputDecoration(
+                    prefixIcon: const Icon(Icons.search),
+                    hintText: session.tr('搜手表、冰箱、相机…', '時計・冷蔵庫・カメラを検索…'),
+                    hintStyle:
+                        const TextStyle(fontSize: 14, color: YunoColors.muted),
+                    suffixIcon: IconButton(
+                      icon: const Icon(Icons.tune),
+                      onPressed: () async {
+                        await showModalBottomSheet(
+                          context: context,
+                          isScrollControlled: true,
+                          builder: (context) => StatefulBuilder(
+                            builder: (context, setModal) => Padding(
+                              padding: EdgeInsets.fromLTRB(
+                                20,
+                                24,
+                                20,
+                                MediaQuery.viewInsetsOf(context).bottom + 24,
+                              ),
+                              child: SingleChildScrollView(
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    DropdownButtonFormField<String>(
+                                      initialValue: category,
+                                      items: [
                                         DropdownMenuItem(
-                                          value: '${c['slug']}',
+                                          value: '',
                                           child: Text(
-                                            session.name(c),
-                                            overflow: TextOverflow.ellipsis,
-                                          ),
+                                              session.tr('全部分类', 'すべてのカテゴリ')),
                                         ),
-                                    ],
-                                    isExpanded: true,
-                                    onChanged: (v) =>
-                                        setModal(() => category = v ?? ''),
-                                  ),
-                                  DropdownButtonFormField<String>(
-                                    initialValue: region,
-                                    items: [
-                                      DropdownMenuItem(
-                                        value: '',
-                                        child:
-                                            Text(session.tr('全部地区', 'すべての地域')),
-                                      ),
-                                      for (final r
-                                          in (session.config['regions'] ?? [])
-                                              .where(
-                                        (dynamic r) =>
-                                            r['active'] == true ||
-                                            r['active'] == 1,
-                                      ))
+                                        for (final c
+                                            in session.config['categories'] ??
+                                                [])
+                                          DropdownMenuItem(
+                                            value: '${c['slug']}',
+                                            child: Text(
+                                              session.name(c),
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                          ),
+                                      ],
+                                      isExpanded: true,
+                                      onChanged: (v) =>
+                                          setModal(() => category = v ?? ''),
+                                    ),
+                                    DropdownButtonFormField<String>(
+                                      initialValue: region,
+                                      items: [
                                         DropdownMenuItem(
-                                          value: '${r['code']}',
-                                          child: Text(session.name(r)),
+                                          value: '',
+                                          child: Text(
+                                              session.tr('全部地区', 'すべての地域')),
                                         ),
-                                    ],
-                                    onChanged: (v) =>
-                                        setModal(() => region = v ?? ''),
-                                  ),
-                                  const SizedBox(height: 12),
-                                  Row(
-                                    children: [
-                                      Expanded(
-                                        child: TextField(
-                                          controller: min,
-                                          keyboardType: TextInputType.number,
-                                          decoration: InputDecoration(
-                                            labelText:
-                                                session.tr('最低价', '最低価格'),
+                                        for (final r
+                                            in (session.config['regions'] ?? [])
+                                                .where(
+                                          (dynamic r) =>
+                                              r['active'] == true ||
+                                              r['active'] == 1,
+                                        ))
+                                          DropdownMenuItem(
+                                            value: '${r['code']}',
+                                            child: Text(session.name(r)),
+                                          ),
+                                      ],
+                                      onChanged: (v) =>
+                                          setModal(() => region = v ?? ''),
+                                    ),
+                                    const SizedBox(height: 12),
+                                    Row(
+                                      children: [
+                                        Expanded(
+                                          child: TextField(
+                                            controller: min,
+                                            keyboardType: TextInputType.number,
+                                            decoration: InputDecoration(
+                                              labelText:
+                                                  session.tr('最低价', '最低価格'),
+                                            ),
                                           ),
                                         ),
-                                      ),
-                                      const SizedBox(width: 12),
-                                      Expanded(
-                                        child: TextField(
-                                          controller: max,
-                                          keyboardType: TextInputType.number,
-                                          decoration: InputDecoration(
-                                            labelText:
-                                                session.tr('最高价', '最高価格'),
+                                        const SizedBox(width: 12),
+                                        Expanded(
+                                          child: TextField(
+                                            controller: max,
+                                            keyboardType: TextInputType.number,
+                                            decoration: InputDecoration(
+                                              labelText:
+                                                  session.tr('最高价', '最高価格'),
+                                            ),
                                           ),
                                         ),
-                                      ),
-                                    ],
-                                  ),
-                                  SwitchListTile(
-                                    title: Text(session.tr('仅平台自营', '自社商品のみ')),
-                                    value: platform,
-                                    onChanged: (v) =>
-                                        setModal(() => platform = v),
-                                  ),
-                                  FilledButton(
-                                    onPressed: () => Navigator.pop(context),
-                                    child: Text(session.tr('应用筛选', '適用')),
-                                  ),
-                                ],
+                                      ],
+                                    ),
+                                    SwitchListTile(
+                                      title:
+                                          Text(session.tr('仅平台自营', '自社商品のみ')),
+                                      value: platform,
+                                      onChanged: (v) =>
+                                          setModal(() => platform = v),
+                                    ),
+                                    FilledButton(
+                                      onPressed: () => Navigator.pop(context),
+                                      child: Text(session.tr('应用筛选', '適用')),
+                                    ),
+                                  ],
+                                ),
                               ),
                             ),
                           ),
-                        ),
-                      );
-                      if (mounted) setState(() => version++);
-                    },
+                        );
+                        if (mounted) setState(() => version++);
+                      },
+                    ),
                   ),
-                ),
-              ),
-              const SizedBox(height: 20),
-              Container(
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                    color: YunoColors.sage,
-                    borderRadius: BorderRadius.circular(22)),
-                child: Row(children: [
-                  Expanded(
-                      child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                        Text(session.tr('旧物新生，生活常新', 'いいものと、次の暮らしへ。'),
-                            style: const TextStyle(
-                                fontSize: 20,
-                                height: 1.4,
-                                fontWeight: FontWeight.w600,
-                                letterSpacing: -0.5)),
-                        const SizedBox(height: 8),
-                        Text(session.tr('从身边开始，发现值得留下的好物。', 'ご近所から、長く愛せるものを。'),
-                            style: const TextStyle(
-                                fontSize: 12, color: Color(0xff667866))),
-                      ])),
-                  const SizedBox(width: 16),
-                  Container(
-                      width: 52,
-                      height: 64,
-                      decoration: BoxDecoration(
-                          color: const Color(0xffd6e1cf),
-                          borderRadius: BorderRadius.circular(24)),
-                      child: const Icon(Icons.eco_outlined,
-                          color: Color(0xff547252), size: 30)),
-                ]),
-              ),
-              const SizedBox(height: 18),
-              SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: Row(children: [
-                  for (final c in <Json>[
-                    {'slug': '', 'name_zh': '全部', 'name_ja': 'すべて'},
-                    ...List<Json>.from(session.config['categories'] ?? [])
-                  ])
-                    Padding(
-                        padding: const EdgeInsets.only(right: 8),
-                        child: ChoiceChip(
-                          label: Text(session.name(c)),
-                          labelStyle: TextStyle(
-                              fontSize: 12,
-                              color: category == c['slug']
-                                  ? Colors.white
-                                  : YunoColors.muted),
-                          selected: category == c['slug'],
-                          showCheckmark: false,
-                          selectedColor: YunoColors.ink,
-                          backgroundColor: Colors.white,
-                          side: BorderSide(
-                              color: category == c['slug']
-                                  ? YunoColors.ink
-                                  : YunoColors.line),
-                          shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(24)),
-                          onSelected: (_) => setState(() {
+                )),
+                const SizedBox(width: 8),
+                FilledButton(
+                    onPressed: () => setState(() => version++),
+                    style: FilledButton.styleFrom(
+                        shape: const StadiumBorder(),
+                        minimumSize: const Size(64, 48),
+                        padding: const EdgeInsets.symmetric(horizontal: 16)),
+                    child: Text(session.tr('搜索', '検索'))),
+              ]),
+              const SizedBox(height: 10),
+              Wrap(spacing: 7, runSpacing: 0, children: [
+                for (final c in <Json>[
+                  {'slug': '', 'name_zh': '全部', 'name_ja': 'すべて'},
+                  ...List<Json>.from(session.config['categories'] ?? [])
+                ])
+                  filterChip(
+                      categoryLabel(c),
+                      category == c['slug'],
+                      () => setState(() {
                             category = c['slug'];
                             version++;
-                          }),
-                        )),
-                ]),
-              ),
-              const SizedBox(height: 22),
-              Row(children: [
-                Text(session.tr('在售好物', '出品中の商品'),
-                    style: const TextStyle(
-                        fontSize: 18, fontWeight: FontWeight.w600)),
-                const Spacer(),
-                Text(session.tr('${items.length} 件', '${items.length} 点'),
-                    style:
-                        const TextStyle(fontSize: 12, color: YunoColors.muted)),
+                          })),
               ]),
-              const SizedBox(height: 14),
+              const SizedBox(height: 10),
               if (items.isEmpty) empty(),
               LayoutBuilder(builder: (context, constraints) {
                 final columns = constraints.maxWidth < 300 ? 1 : 2;
@@ -623,8 +668,8 @@ class _MarketPageState extends State<MarketPage> {
                     crossAxisCount: columns,
                     crossAxisSpacing: 12,
                     mainAxisSpacing: 12,
-                    mainAxisExtent: cardWidth / 1.1 +
-                        134 * MediaQuery.textScalerOf(context).scale(14) / 14,
+                    mainAxisExtent: cardWidth / 1.05 +
+                        150 * MediaQuery.textScalerOf(context).scale(14) / 14,
                   ),
                   itemBuilder: (_, i) =>
                       ListingCard(item: items[i], onReturn: reload),
@@ -660,7 +705,7 @@ class ListingCard extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               AspectRatio(
-                  aspectRatio: 1.1,
+                  aspectRatio: 1.05,
                   child: Stack(fit: StackFit.expand, children: [
                     if (photos.isNotEmpty)
                       imageView(photos.first['url'])
@@ -720,17 +765,25 @@ class ListingCard extends StatelessWidget {
                             style: const TextStyle(
                                 fontSize: 14,
                                 height: 1.4,
-                                fontWeight: FontWeight.w500)),
+                                fontWeight: FontWeight.w700)),
                         const SizedBox(height: 8),
                         Text(yen(item['effective_price'] ?? item['price']),
                             style: const TextStyle(
-                                fontSize: 21,
-                                letterSpacing: -0.5,
+                                fontSize: 18,
+                                color: YunoColors.ink,
+                                letterSpacing: -0.3,
                                 fontWeight: FontWeight.w600)),
                         const SizedBox(height: 3),
-                        Text(status(session, item['condition_grade']),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
+                        Wrap(spacing: 5, runSpacing: 4, children: [
+                          badge(status(session, item['condition_grade'])),
+                          if (item['category_id'] != null)
+                            for (final c in session.config['categories'] ?? [])
+                              if (c['id'] == item['category_id'])
+                                badge(categoryLabel(
+                                    Map<String, dynamic>.from(c))),
+                        ]),
+                        const SizedBox(height: 5),
+                        Text(regionLabel(item['region']),
                             style: const TextStyle(
                                 fontSize: 11, color: YunoColors.muted)),
                       ])),
@@ -909,7 +962,7 @@ class _CommandFormState extends State<CommandForm> {
       child: Form(
         key: form,
         child: ListView(
-          padding: const EdgeInsets.all(20),
+          padding: const EdgeInsets.all(14),
           children: [
             simulation(),
             for (final e in fields.entries)
@@ -1113,7 +1166,7 @@ class DetailPage extends StatelessWidget {
               'unit_price',
             ];
             return ListView(
-              padding: const EdgeInsets.all(20),
+              padding: const EdgeInsets.all(14),
               children: [
                 if (photos.isNotEmpty)
                   SizedBox(
@@ -1317,12 +1370,13 @@ class AccountListPage extends StatelessWidget {
         'listings': session.tr('我的商品', '出品商品'),
         'oneclick_drafts': session.tr('发布草稿', '下書き'),
         'threads': session.tr('站内消息', 'メッセージ'),
+        'following': session.tr('我的收藏', 'お気に入り'),
       }[kind] ??
       '';
   @override
   Widget build(BuildContext context) {
     if (!session.signedIn) {
-      return ListView(padding: const EdgeInsets.all(20), children: [
+      return ListView(padding: const EdgeInsets.all(14), children: [
         heading(title),
         const SizedBox(height: 64),
         Center(
@@ -1355,12 +1409,24 @@ class AccountListPage extends StatelessWidget {
       builder: (context, data, reload) {
         final items = List<Json>.from(data[kind] ?? []);
         return ListView(
-          padding: const EdgeInsets.all(20),
+          padding: const EdgeInsets.all(14),
           children: [
             heading(title),
+            if (kind == 'buybacks') ...[
+              Text(
+                  session.tr('从自己已发布的商品中选择，进入商品详情申请平台买断。报价需平台评估，可婉拒。',
+                      '出品済みの商品を選び、商品詳細から買取申込へ。査定によりお断りする場合があります。'),
+                  style:
+                      const TextStyle(fontSize: 12, color: YunoColors.muted)),
+              const SizedBox(height: 8),
+              FilledButton(
+                  onPressed: () => openAccount(context, 'listings'),
+                  child: Text(session.tr('选择商品申请回收', '商品を選んで買取申込'))),
+              const SizedBox(height: 16),
+            ],
             if (items.isEmpty) empty(),
             for (final item in items)
-              if (kind == 'listings')
+              if (kind == 'listings' || kind == 'following')
                 ListingCard(item: item, onReturn: reload)
               else
                 Card(
@@ -1423,133 +1489,195 @@ IconData resourceIcon(String key) => switch (key) {
       _ => Icons.cleaning_services_outlined,
     };
 
+Future<void> openAccount(BuildContext context, String kind) async {
+  if (await ensureLogin(context) && context.mounted) {
+    await open(
+        context,
+        PageFrame(
+            title: AccountListPage(kind: kind).title,
+            child: AccountListPage(kind: kind)));
+  }
+}
+
 class TradePage extends StatelessWidget {
-  const TradePage({super.key});
+  final VoidCallback? onMarket, onOrders;
+  const TradePage({super.key, this.onMarket, this.onOrders});
   @override
   Widget build(BuildContext context) => ListView(
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.all(14),
         children: [
-          heading(
-            session.tr('交易', '取引'),
-            subtitle: session.tr('拍照，让闲置找到新主人', '写真から、次の持ち主へ'),
-          ),
+          heading(session.tr('交易', '取引')),
           Card(
-            color: YunoColors.sage,
-            child: Padding(
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Align(
-                      alignment: Alignment.centerLeft,
-                      child: Container(
-                        width: 48,
-                        height: 48,
-                        decoration: BoxDecoration(
-                            color: YunoColors.ink,
-                            borderRadius: BorderRadius.circular(16)),
-                        child: const Icon(Icons.camera_alt_outlined,
-                            size: 24, color: Colors.white),
-                      )),
-                  const SizedBox(height: 16),
-                  Text(
-                    session.tr('拍照 · AI 辅助发布', '撮影・AI出品サポート'),
-                    style: const TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    session.tr(
-                      '识别结果均为推测，可修改。确认后才会上架。',
-                      '認識結果は推測です。編集・確認してから公開します。',
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  FilledButton(
-                    onPressed: () async {
-                      if (await ensureLogin(context) && context.mounted) {
-                        await open(context, const PublishPage());
-                      }
-                    },
-                    child: Text(session.tr('拍照发布', '撮影して出品')),
-                  ),
-                ],
-              ),
-            ),
+            color: YunoColors.primary,
+            clipBehavior: Clip.antiAlias,
+            child: InkWell(
+                onTap: () async {
+                  if (await ensureLogin(context) && context.mounted) {
+                    await open(context, const PublishPage());
+                  }
+                },
+                child: Padding(
+                    padding: const EdgeInsets.all(18),
+                    child: Row(children: [
+                      Container(
+                          width: 50,
+                          height: 50,
+                          decoration: BoxDecoration(
+                              color: Colors.white.withValues(alpha: 0.15),
+                              shape: BoxShape.circle),
+                          child: const Icon(Icons.photo_camera_outlined,
+                              color: Colors.white, size: 24)),
+                      const SizedBox(width: 14),
+                      Expanded(
+                          child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                            Text(session.tr('拍照发布 · AI 一键估价', '撮影して出品・AI一括査定'),
+                                style: const TextStyle(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.w800,
+                                    color: Colors.white)),
+                            const SizedBox(height: 5),
+                            Text(
+                                session.tr('先拍照，AI 一次给出识别、鉴定与估价，最多 10 张，第一张为封面',
+                                    '写真から認識・鑑定・査定へ。最大10枚、先頭がカバーです。'),
+                                style: const TextStyle(
+                                    fontSize: 12,
+                                    height: 1.6,
+                                    color: Colors.white)),
+                          ])),
+                    ]))),
           ),
+          LayoutBuilder(builder: (context, constraints) {
+            final actions = <(String, String, VoidCallback)>[
+              (
+                session.tr('我要买', '買いたい'),
+                session.tr('浏览在售商品，一口价买断或参与拍卖', '出品中の商品を探す。即決購入やオークションへ'),
+                onMarket ??
+                    () => open(
+                        context,
+                        const PageFrame(
+                            title: 'Yuno Life', child: MarketPage()))
+              ),
+              (
+                session.tr('平台回收', '買取サービス'),
+                session.tr(
+                    '按品类与库存评估报价，平台可婉拒，不承诺固定比例', '品目と在庫から個別査定。買取をお断りする場合があります'),
+                () => openAccount(context, 'buybacks')
+              ),
+              (
+                session.tr('我的订单', '注文履歴'),
+                session.tr('查看付款、配送与完成状态', '決済・配送・完了状況を確認'),
+                onOrders ?? () => openAccount(context, 'orders')
+              ),
+              (
+                session.tr('我的发布', '出品管理'),
+                session.tr('管理在售与已售商品', '出品中・売却済みの商品を管理'),
+                () => openAccount(context, 'listings')
+              ),
+            ];
+            final width = (constraints.maxWidth - 10) / 2;
+            return Wrap(spacing: 10, children: [
+              for (final a in actions)
+                SizedBox(
+                    width: width,
+                    child: Card(
+                        clipBehavior: Clip.antiAlias,
+                        child: InkWell(
+                            onTap: a.$3,
+                            child: Padding(
+                              padding: const EdgeInsets.all(13),
+                              child: ConstrainedBox(
+                                  constraints:
+                                      const BoxConstraints(minHeight: 66),
+                                  child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(a.$1,
+                                            style: const TextStyle(
+                                                fontWeight: FontWeight.w700,
+                                                fontSize: 15)),
+                                        const SizedBox(height: 4),
+                                        Text(a.$2,
+                                            style: const TextStyle(
+                                                fontSize: 12, height: 1.5)),
+                                      ])),
+                            ))))
+            ]);
+          }),
+          const SizedBox(height: 8),
+          heading(session.tr('增值服务', '暮らしのサービス')),
+          Card(
+              child: Column(children: [
+            for (final e in (session.config['services'] as Map? ?? {}).entries)
+              ListTile(
+                title: Text(session.name(Map<String, dynamic>.from(e.value)),
+                    style: const TextStyle(fontWeight: FontWeight.w700)),
+                subtitle: Text(
+                    '${yen(e.value['price'])}${e.value['unit'] == 'hour' ? session.tr(' / 小时，按实际时长结算', ' / 時間') : e.key == 'transport_small' ? session.tr(' / 趟，10kg 以内', ' / 回、10kg以内') : session.tr(' / 趟起，按距离与尺寸确认', ' / 回〜、距離・サイズにより確認')}',
+                    style: const TextStyle(fontSize: 11)),
+                trailing: FilledButton(
+                    onPressed: () async {
+                      if (!await ensureLogin(context) || !context.mounted) {
+                        return;
+                      }
+                      await runCommand(
+                          context,
+                          {
+                            'path': '/services/new',
+                            'label': {'zh': '服务预约（模拟）', 'ja': 'サービス予約（模擬）'},
+                            'fields': {
+                              'kind': {'default': e.key, 'required': true},
+                              'hours': {
+                                'default': 1,
+                                'type': 'number',
+                                'required': true
+                              },
+                              'qty': {
+                                'default': 1,
+                                'type': 'number',
+                                'required': true
+                              },
+                              'note': {'default': ''},
+                            },
+                          },
+                          openResult: true);
+                    },
+                    child: Text(session.tr('预约', '予約'))),
+              ),
+          ])),
+          Card(
+              child: Padding(
+                  padding: const EdgeInsets.all(14),
+                  child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(session.tr('配送说明', '配送について'),
+                            style:
+                                const TextStyle(fontWeight: FontWeight.w700)),
+                        const SizedBox(height: 5),
+                        Text(
+                            session.tr(
+                                '小件配送 ¥150 起，按距离、重量与尺寸计价；大件单独报价，不承诺所有商品均可配送。',
+                                '小型配送は¥150〜。距離・重量・サイズで確認。大型品は個別見積りで、配送できない場合もあります。'),
+                            style: const TextStyle(
+                                fontSize: 12, color: YunoColors.muted)),
+                        simulation(),
+                      ]))),
           for (final pair in [
             ['auctions', session.tr('拍卖市场', 'オークション')],
-            ['buybacks', session.tr('我的买断申请', '買取申込')],
             ['offers', session.tr('议价管理', '価格交渉')],
             ['oneclick_drafts', session.tr('继续编辑草稿', '下書きを編集')],
             ['deliveries', session.tr('配送预约（模拟）', '配達予約（模擬）')],
           ])
-            Card(
-              child: ListTile(
-                leading: Icon(resourceIcon(pair[0]), size: 21),
+            ListTile(
+                leading: Icon(resourceIcon(pair[0]), size: 20),
                 title: Text(pair[1]),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: () async {
-                  if (pair[0] == 'auctions') {
-                    await open(context, const AuctionListPage());
-                  } else if (await ensureLogin(context) && context.mounted) {
-                    await open(
-                      context,
-                      PageFrame(
-                        title: pair[1],
-                        child: AccountListPage(kind: pair[0]),
-                      ),
-                    );
-                  }
-                },
-              ),
-            ),
-          const SizedBox(height: 18),
-          heading(session.tr('本地生活服务', '地域の暮らしサービス')),
-          for (final e in (session.config['services'] as Map? ?? {}).entries)
-            Card(
-              child: ListTile(
-                leading: Icon(
-                    e.key == 'local_delivery'
-                        ? Icons.local_shipping_outlined
-                        : e.key == 'transport_small'
-                            ? Icons.move_to_inbox_outlined
-                            : Icons.cleaning_services_outlined,
-                    size: 22),
-                title: Text(session.name(Map<String, dynamic>.from(e.value))),
-                subtitle: Text(
-                  '${yen(e.value['price'])}${e.value['unit'] == 'hour' ? session.tr('/小时', '/時間') : session.tr('/趟起', '/回〜')}${e.key == 'transport_small' ? session.tr(' · 10kg 以内', '・10kg以内') : ''}',
-                ),
-                trailing: const Icon(Icons.arrow_forward),
-                onTap: () async {
-                  if (!await ensureLogin(context) || !context.mounted) return;
-                  await runCommand(
-                      context,
-                      {
-                        'path': '/services/new',
-                        'label': {'zh': '服务预约（模拟）', 'ja': 'サービス予約（模擬）'},
-                        'fields': {
-                          'kind': {'default': e.key, 'required': true},
-                          'hours': {
-                            'default': 1,
-                            'type': 'number',
-                            'required': true
-                          },
-                          'qty': {
-                            'default': 1,
-                            'type': 'number',
-                            'required': true
-                          },
-                          'note': {'default': ''},
-                        },
-                      },
-                      openResult: true);
-                },
-              ),
-            ),
-          simulation(),
+                trailing: const Icon(Icons.chevron_right, size: 18),
+                onTap: () => pair[0] == 'auctions'
+                    ? open(context, const AuctionListPage())
+                    : openAccount(context, pair[0])),
         ],
       );
 }
@@ -1562,7 +1690,7 @@ class AuctionListPage extends StatelessWidget {
         child: LoadView(
           load: () => session.get('/auctions'),
           builder: (context, data, reload) => ListView(
-            padding: const EdgeInsets.all(20),
+            padding: const EdgeInsets.all(14),
             children: [
               simulation(),
               if ((data['items'] as List).isEmpty) empty(),
@@ -1591,117 +1719,184 @@ class AuctionListPage extends StatelessWidget {
       );
 }
 
-class TrendsPage extends StatelessWidget {
+class TrendsPage extends StatefulWidget {
   const TrendsPage({super.key});
-  Widget board(BuildContext context, List<dynamic> items, bool up) => Expanded(
+  @override
+  State<TrendsPage> createState() => _TrendsPageState();
+}
+
+class _TrendsPageState extends State<TrendsPage> {
+  String category = '';
+  Widget leader(BuildContext context, List<dynamic> items, bool up) {
+    final color = up ? const Color(0xff00865d) : const Color(0xffd53f43);
+    return Expanded(
         child: Card(
+            child: InkWell(
+      onTap: items.isEmpty
+          ? null
+          : () => open(
+              context,
+              DetailPage(
+                  path: '/listings/${items.first['listing_id']}',
+                  title: session.title(items.first))),
+      child: Padding(
+          padding: const EdgeInsets.all(12),
+          child:
+              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(
+                up
+                    ? session.tr('涨幅第一', '上昇率トップ')
+                    : session.tr('跌幅第一', '下落率トップ'),
+                style: TextStyle(
+                    fontSize: 11, fontWeight: FontWeight.w700, color: color)),
+            const SizedBox(height: 6),
+            Text(
+                items.isEmpty
+                    ? session.tr('样本不足', 'サンプル不足')
+                    : session.title(items.first),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style:
+                    const TextStyle(fontSize: 14, fontWeight: FontWeight.w700)),
+            const SizedBox(height: 5),
+            Text(
+                items.isEmpty
+                    ? '—'
+                    : '${up ? '▲ +' : '▼ '}${items.first['pct']}%',
+                style: TextStyle(
+                    color: color, fontSize: 23, fontWeight: FontWeight.w800)),
+          ])),
+    )));
+  }
+
+  Widget metric(dynamic count, String label, Color color) => Expanded(
+      child: Card(
           child: Padding(
-            padding: const EdgeInsets.all(10),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Text(
-                  up ? session.tr('上涨 ▲', '上昇 ▲') : session.tr('下跌 ▼', '下落 ▼'),
-                  style: TextStyle(
-                    color: up ? Colors.green.shade800 : Colors.red.shade800,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 20,
-                  ),
-                ),
-                if (items.isEmpty) Text(session.tr('样本不足', 'サンプル不足')),
-                for (final indexed in items.indexed) ...[
-                  if (indexed.$1 == 0)
-                    Text(
-                      up
-                          ? session.tr('最高涨幅', '最大上昇')
-                          : session.tr('最高跌幅', '最大下落'),
-                      style: const TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                  TextButton(
-                    onPressed: () => open(
-                      context,
-                      DetailPage(
-                        path: '/listings/${indexed.$2['listing_id']}',
-                        title: session.title(indexed.$2),
-                      ),
-                    ),
-                    child: Text(
-                      session.title(indexed.$2),
-                      maxLines: 3,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  Text(
-                    '${up ? '▲' : '▼'} ${indexed.$2['pct']}%',
+              padding: const EdgeInsets.symmetric(vertical: 14),
+              child: Column(children: [
+                Text('$count',
                     style: TextStyle(
-                      color: up ? Colors.green.shade800 : Colors.red.shade800,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 20,
-                    ),
-                  ),
-                  Text(
-                    '${yen(indexed.$2['first'])} → ${yen(indexed.$2['latest'])}',
-                  ),
-                  Text(
-                    session.tr(
-                      '${indexed.$2['orders']} 笔真实订单',
-                      '実取引 ${indexed.$2['orders']} 件',
-                    ),
-                  ),
-                  const Divider(),
-                ],
-              ],
-            ),
-          ),
-        ),
-      );
+                        color: color,
+                        fontSize: 24,
+                        fontWeight: FontWeight.w800)),
+                Text(label, style: const TextStyle(fontSize: 11)),
+              ]))));
   @override
   Widget build(BuildContext context) => LoadView(
         load: () => session.get('/market'),
         builder: (context, data, reload) {
           final moves = data['moves'] as Json;
-          return ListView(
-            padding: const EdgeInsets.all(20),
-            children: [
-              heading(session.tr('成交行情', '取引相場')),
-              Text(session.local(data['basis'])),
-              const SizedBox(height: 16),
-              Text(
+          final gainers = List<dynamic>.from(moves['gainers']);
+          final losers = List<dynamic>.from(moves['losers']);
+          return ListView(padding: const EdgeInsets.all(14), children: [
+            heading(session.tr('成交行情', '取引相場')),
+            Text(session.local(data['basis']),
+                style: const TextStyle(fontSize: 12, color: YunoColors.muted)),
+            const SizedBox(height: 12),
+            Row(children: [
+              metric(moves['up_count'], session.tr('上涨商品', '上昇商品'),
+                  const Color(0xff00865d)),
+              const SizedBox(width: 8),
+              metric(moves['down_count'], session.tr('下跌商品', '下落商品'),
+                  const Color(0xffd53f43)),
+              const SizedBox(width: 8),
+              metric(moves['insufficient'], session.tr('数据不足', 'データ不足'),
+                  YunoColors.ink),
+            ]),
+            Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              leader(context, gainers, true),
+              const SizedBox(width: 10),
+              leader(context, losers, false),
+            ]),
+            Text(
                 session.tr(
-                  '上涨 ${moves['up_count']} · 下跌 ${moves['down_count']} · 持平 ${moves['flat_count']}',
-                  '上昇 ${moves['up_count']}・下落 ${moves['down_count']}・横ばい ${moves['flat_count']}',
-                ),
+                    '数据不足的商品不参与排名，挂牌价不计入涨跌。', 'データ不足の商品はランキング対象外。出品価格は含みません。'),
+                style: const TextStyle(fontSize: 11, color: YunoColors.muted)),
+            const SizedBox(height: 16),
+            Wrap(spacing: 7, children: [
+              filterChip(session.tr('全部', 'すべて'), category.isEmpty,
+                  () => setState(() => category = '')),
+              for (final c
+                  in List<Json>.from(session.config['categories'] ?? []))
+                filterChip(categoryLabel(c), category == c['slug'],
+                    () => setState(() => category = c['slug'])),
+            ]),
+            const SizedBox(height: 10),
+            for (final group in [
+              (
+                gainers
+                    .where((item) =>
+                        category.isEmpty || item['cat_slug'] == category)
+                    .toList(),
+                true
               ),
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  board(context, moves['gainers'], true),
-                  board(context, moves['losers'], false),
-                ],
+              (
+                losers
+                    .where((item) =>
+                        category.isEmpty || item['cat_slug'] == category)
+                    .toList(),
+                false
               ),
-              Text(
-                session.tr(
-                  '真实订单不足 2 笔的 ${moves['insufficient']} 件商品已排除。',
-                  '実取引2件未満の ${moves['insufficient']} 商品は対象外です。',
-                ),
-              ),
-              const SizedBox(height: 20),
-              heading(session.tr('分类成交概览', 'カテゴリ別取引')),
-              for (final cat in data['categories'])
+            ]) ...[
+              heading(group.$2
+                  ? session.tr('上涨 ▲', '上昇 ▲')
+                  : session.tr('下跌 ▼', '下落 ▼')),
+              if (group.$1.isEmpty)
                 Card(
-                  child: ListTile(
-                    title: Text(session.name(cat)),
-                    subtitle: Text(
-                      session.tr(
-                        '成交 ${cat['completed']} 笔 · 样本不足时不编造行情',
-                        '取引 ${cat['completed']} 件・データ不足時は推測しません',
-                      ),
-                    ),
-                    trailing: Text(yen(cat['avg'])),
-                  ),
-                ),
+                    child: Padding(
+                        padding: const EdgeInsets.all(14),
+                        child: Text(
+                            session.tr('暂无足够的真实成交样本', '十分な実取引データがありません'),
+                            style: const TextStyle(
+                                fontSize: 12, color: YunoColors.muted)))),
+              for (final item in group.$1)
+                Card(
+                    child: ListTile(
+                  title: Text(session.title(item),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                          fontSize: 14, fontWeight: FontWeight.w700)),
+                  subtitle: Text(
+                      session.tr('参考价 ', '基準価格 ') +
+                          yen(item['first']) +
+                          session.tr(' · 成交 ${item['orders']} 笔',
+                              '・取引 ${item['orders']} 件'),
+                      style: const TextStyle(fontSize: 11)),
+                  trailing: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Text(yen(item['latest']),
+                            style:
+                                const TextStyle(fontWeight: FontWeight.w800)),
+                        Text('${group.$2 ? '▲ +' : '▼ '}${item['pct']}%',
+                            style: TextStyle(
+                                color: group.$2
+                                    ? const Color(0xff00865d)
+                                    : const Color(0xffd53f43),
+                                fontWeight: FontWeight.w700))
+                      ]),
+                  onTap: () => open(
+                      context,
+                      DetailPage(
+                          path: '/listings/${item['listing_id']}',
+                          title: session.title(item))),
+                )),
             ],
-          );
+            const SizedBox(height: 8),
+            heading(session.tr('分类成交概览', 'カテゴリ別取引')),
+            for (final cat in data['categories'])
+              Card(
+                  child: ListTile(
+                title: Text(session.name(cat)),
+                subtitle: Text(
+                    session.tr('成交 ${cat['completed']} 笔 · 样本不足时不编造行情',
+                        '取引 ${cat['completed']} 件・データ不足時は推測しません'),
+                    style: const TextStyle(fontSize: 11)),
+                trailing: Text(yen(cat['avg'])),
+              )),
+          ]);
         },
       );
 }
@@ -1710,124 +1905,287 @@ class ProfilePage extends StatelessWidget {
   const ProfilePage({super.key});
   @override
   Widget build(BuildContext context) => ListView(
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.all(14),
         children: [
-          Row(children: [
-            Container(
-                width: 52,
-                height: 52,
-                decoration: BoxDecoration(
-                    color: YunoColors.sage,
-                    borderRadius: BorderRadius.circular(18)),
-                child: const Icon(Icons.person_outline,
-                    color: YunoColors.ink, size: 28)),
-            const SizedBox(width: 14),
-            Expanded(
-                child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                  Text(
-                      session.me?['display_name'] ??
-                          session.tr('个人中心', 'マイページ'),
-                      style: const TextStyle(
-                          fontSize: 23, fontWeight: FontWeight.w600)),
-                  Text(session.tr('你的好物与生活记录', 'ものと暮らしの記録'),
-                      style: const TextStyle(
-                          fontSize: 12, color: YunoColors.muted)),
-                ])),
-          ]),
-          const SizedBox(height: 24),
+          Card(
+              child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Row(children: [
+                    const CircleAvatar(
+                        radius: 26,
+                        backgroundColor: YunoColors.sage,
+                        child: Text('Y',
+                            style: TextStyle(
+                                color: YunoColors.primary,
+                                fontSize: 22,
+                                fontWeight: FontWeight.w800))),
+                    const SizedBox(width: 14),
+                    Expanded(
+                        child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                          Text(
+                              session.me?['display_name'] ??
+                                  session.tr('访客', 'ゲスト'),
+                              style: const TextStyle(
+                                  fontSize: 18, fontWeight: FontWeight.w700)),
+                          const SizedBox(height: 4),
+                          Text(session.tr('管理你的商品、订单与本地服务', '出品・注文・地域サービスを管理'),
+                              style: const TextStyle(fontSize: 12)),
+                        ])),
+                  ]))),
           if (!session.signedIn)
-            FilledButton(
-              onPressed: () => open(context, const AuthPage()),
-              child: Text(session.tr('登录 / 注册', 'ログイン・登録')),
-            ),
-          const SizedBox(height: 16),
-          DropdownButtonFormField<String>(
-            initialValue: session.language,
-            decoration: InputDecoration(labelText: session.tr('语言', '言語')),
-            items: [
-              const DropdownMenuItem(value: 'zh', child: Text('中文')),
-              const DropdownMenuItem(value: 'ja', child: Text('日本語')),
-              DropdownMenuItem(
-                value: 'system',
-                child: Text(session.tr('跟随系统', 'システム設定')),
-              ),
-            ],
-            onChanged: (v) {
-              if (v != null) session.setLanguage(v);
-            },
-          ),
-          const SizedBox(height: 20),
-          for (final kind in [
-            'listings',
-            'orders',
-            'offers',
-            'buybacks',
-            'service_orders',
-            'deliveries',
-            'oneclick_drafts',
-            'threads',
-          ])
+            Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: FilledButton(
+                    onPressed: () => open(context, const AuthPage()),
+                    child: Text(session.tr('登录 / 注册', 'ログイン・登録')))),
+          Card(
+              clipBehavior: Clip.antiAlias,
+              child: Column(children: [
+                for (final kind in [
+                  'listings',
+                  'following',
+                  'service_orders',
+                  'deliveries'
+                ]) ...[
+                  ListTile(
+                      title: Text(AccountListPage(kind: kind).title),
+                      trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+                        if (session.me?[kind] is List)
+                          Text('${(session.me![kind] as List).length}',
+                              style: const TextStyle(
+                                  fontSize: 12, color: YunoColors.muted)),
+                        const SizedBox(width: 16),
+                        const Icon(Icons.chevron_right, size: 16),
+                      ]),
+                      onTap: () => openAccount(context, kind)),
+                  if (kind != 'deliveries') const Divider(height: 1),
+                ],
+                const Divider(height: 1),
+                ExpansionTile(
+                    title: Text(session.tr('更多交易管理', '取引管理')),
+                    children: [
+                      for (final kind in [
+                        'orders',
+                        'offers',
+                        'buybacks',
+                        'oneclick_drafts',
+                        'threads'
+                      ])
+                        ListTile(
+                            title: Text(AccountListPage(kind: kind).title),
+                            trailing: const Icon(Icons.chevron_right, size: 16),
+                            onTap: () => openAccount(context, kind))
+                    ]),
+                if (session.operatorRole) ...[
+                  const Divider(height: 1),
+                  ListTile(
+                      title: Text(session.tr('员工入口', 'スタッフ入口')),
+                      trailing: const Icon(Icons.chevron_right, size: 16),
+                      onTap: () => open(context, const AdminPage())),
+                ],
+              ])),
+          const SizedBox(height: 12),
+          heading(session.tr('规则与说明', 'ルールとご案内')),
+          const RulesAccordion(),
+          Card(
+              child: Column(children: [
             ListTile(
-              leading: Icon(resourceIcon(kind), size: 21),
-              title: Text(AccountListPage(kind: kind).title),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () async {
-                if (await ensureLogin(context) && context.mounted) {
-                  await open(
-                    context,
-                    PageFrame(
-                      title: AccountListPage(kind: kind).title,
-                      child: AccountListPage(kind: kind),
-                    ),
-                  );
-                }
-              },
-            ),
-          ListTile(
-            leading: const Icon(Icons.policy_outlined),
-            title: Text(session.tr('规则与说明', '規約と説明')),
-            onTap: () => open(context, const RulesPage()),
-          ),
-          ListTile(
-            leading: const Icon(Icons.support_agent_outlined),
-            title: Text(session.tr('本地客服助手', 'ローカルサポート')),
-            onTap: () => open(context, const SupportPage()),
-          ),
-          if (session.operatorRole)
+                title: Text(session.tr('全部条款与隐私政策', '利用規約・プライバシー')),
+                trailing: const Icon(Icons.chevron_right, size: 16),
+                onTap: () => open(context, const RulesPage())),
+            const Divider(height: 1),
             ListTile(
-              leading: const Icon(Icons.admin_panel_settings_outlined),
-              title: Text(session.tr('管理后台', '運営管理')),
-              onTap: () => open(context, const AdminPage()),
-            ),
-          ExpansionTile(
-            title: Text(session.tr('连接平台', 'サーバー接続')),
-            children: [
-              Padding(
-                padding: const EdgeInsets.all(12),
-                child: ConnectionForm(onSaved: () {}),
-              ),
-            ],
-          ),
+                title: Text(session.tr('本地客服助手', 'ローカルサポート')),
+                trailing: const Icon(Icons.chevron_right, size: 16),
+                onTap: () => open(context, const SupportPage())),
+          ])),
+          Card(
+              child: ExpansionTile(
+                  title: Text(session.tr('连接平台', 'サーバー接続')),
+                  children: [
+                Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: ConnectionForm(onSaved: () {}))
+              ])),
           if (session.signedIn)
             OutlinedButton(
-              onPressed: () async {
-                try {
-                  await session.signOut();
-                } catch (e) {
-                  if (context.mounted) notify(context, failure(e));
-                }
-              },
-              child: Text(session.tr('退出登录', 'ログアウト')),
-            ),
+                onPressed: () async {
+                  try {
+                    await session.signOut();
+                  } catch (e) {
+                    if (context.mounted) notify(context, failure(e));
+                  }
+                },
+                child: Text(session.tr('退出登录', 'ログアウト'))),
           simulation(),
           const Center(
-              child: Text('Yuno Life · 0.2.0 (3)',
+              child: Text('Yuno Life · 0.3.0 (4)',
                   style: TextStyle(fontSize: 11, color: YunoColors.muted))),
           const SizedBox(height: 16),
         ],
       );
+}
+
+class RulesAccordion extends StatelessWidget {
+  const RulesAccordion({super.key});
+  @override
+  Widget build(BuildContext context) => FutureBuilder<Json>(
+        future: session.get('/rules'),
+        builder: (context, snapshot) {
+          if (snapshot.hasError) {
+            return TextButton(
+                onPressed: () => open(context, const RulesPage()),
+                child: Text(session.tr('查看规则与说明', 'ルールを確認')));
+          }
+          return Column(children: [
+            for (final entry in <(String, String)>[
+              (
+                session.tr('佣金与费用', '手数料・費用'),
+                session.tr('默认佣金 10%，后台可调 7–10%。商品价格含税。',
+                    '手数料は初期設定10%、7–10%で調整可能。表示価格は税込です。')
+              ),
+              for (final item in List<Json>.from(snapshot.data?['items'] ?? []))
+                (
+                  switch (item['key']) {
+                    'terms' => session.tr('利用规约', '利用規約'),
+                    'privacy' => session.tr('隐私政策', 'プライバシー'),
+                    'returns' => session.tr('退货与纠纷', '返品・紛争'),
+                    'prohibited' => session.tr('禁售品', '出品禁止物'),
+                    _ => session.tr('平台规则', 'ルール'),
+                  },
+                  session.local(item)
+                ),
+              (
+                session.tr('AI 估价说明', 'AI査定について'),
+                session.tr(
+                    'AI 结果为参考，可手动修改；无同型号市场样本时如实说明，不编造价格。此报价为AI根据现实数据做出的估价，用户可以根据自身另行填写',
+                    'AI結果は参考情報で編集できます。同一型番の相場データがない場合は明示し、価格を捏造しません。査定は取引価格や買取の保証ではありません。')
+              ),
+            ])
+              Card(
+                  child: ExpansionTile(
+                      title: Text(entry.$1,
+                          style: const TextStyle(
+                              fontSize: 14, fontWeight: FontWeight.w700)),
+                      children: [
+                    Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                        child: Align(
+                            alignment: Alignment.centerLeft,
+                            child: Text(entry.$2,
+                                style: const TextStyle(
+                                    fontSize: 12, height: 1.7))))
+                  ])),
+          ]);
+        },
+      );
+}
+
+class OrdersPage extends StatefulWidget {
+  const OrdersPage({super.key});
+  @override
+  State<OrdersPage> createState() => _OrdersPageState();
+}
+
+class _OrdersPageState extends State<OrdersPage> {
+  String selected = '';
+  @override
+  Widget build(BuildContext context) {
+    if (!session.signedIn) return const AccountListPage(kind: 'orders');
+    return LoadView(
+        load: () => session.get('/orders'),
+        builder: (context, data, reload) {
+          final items = List<Json>.from(data['items'] ?? [])
+              .where((item) => selected.isEmpty || item['status'] == selected)
+              .toList();
+          return ListView(padding: const EdgeInsets.all(14), children: [
+            heading(session.tr('订单', '注文')),
+            Wrap(spacing: 7, children: [
+              for (final entry in ['', 'pending_payment', 'paid', 'completed'])
+                filterChip(
+                    entry.isEmpty
+                        ? session.tr('全部', 'すべて')
+                        : status(session, entry),
+                    selected == entry,
+                    () => setState(() => selected = entry)),
+            ]),
+            const SizedBox(height: 10),
+            if (items.isEmpty) empty(),
+            for (final item in items)
+              Card(
+                  clipBehavior: Clip.antiAlias,
+                  child: InkWell(
+                    onTap: () async {
+                      await open(
+                          context,
+                          DetailPage(
+                              path: '/orders/${item['id']}',
+                              title: session.tr('订单详情', '注文詳細')));
+                      reload();
+                    },
+                    child: Padding(
+                        padding: const EdgeInsets.all(13),
+                        child: Column(children: [
+                          Row(children: [
+                            ClipRRect(
+                                borderRadius: BorderRadius.circular(8),
+                                child: SizedBox(
+                                    width: 56,
+                                    height: 56,
+                                    child: (item['listing']?['photos']
+                                                    as List? ??
+                                                [])
+                                            .isEmpty
+                                        ? Container(
+                                            color: YunoColors.paper,
+                                            child: const Icon(
+                                                Icons.image_outlined,
+                                                color: YunoColors.muted))
+                                        : imageView(
+                                            item['listing']['photos'][0]['url'],
+                                            width: 56,
+                                            height: 56))),
+                            const SizedBox(width: 11),
+                            Expanded(
+                                child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                  Text(
+                                      item['listing'] is Map
+                                          ? session.title(
+                                              Map<String, dynamic>.from(
+                                                  item['listing']))
+                                          : '#${item['listing_id']}',
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: const TextStyle(
+                                          fontSize: 14,
+                                          fontWeight: FontWeight.w700)),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                      '#${item['id']} · ${status(session, item['status'])}',
+                                      style: const TextStyle(
+                                          fontSize: 11,
+                                          color: YunoColors.muted)),
+                                ])),
+                          ]),
+                          const Divider(height: 22),
+                          Row(children: [
+                            badge(session.tr('模拟支付', '模擬決済'), warning: true),
+                            const Spacer(),
+                            Text(yen(item['total']),
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.w800, fontSize: 16))
+                          ]),
+                        ])),
+                  )),
+            simulation(),
+          ]);
+        });
+  }
 }
 
 class ConnectionForm extends StatefulWidget {
@@ -1888,13 +2246,13 @@ class RulesPage extends StatelessWidget {
         child: LoadView(
           load: () => session.get('/rules'),
           builder: (context, data, reload) => ListView(
-            padding: const EdgeInsets.all(20),
+            padding: const EdgeInsets.all(14),
             children: [
               simulation(),
               for (final item in data['items'])
                 Card(
                   child: Padding(
-                    padding: const EdgeInsets.all(20),
+                    padding: const EdgeInsets.all(14),
                     child: Text(
                       session.local(item),
                       style: const TextStyle(fontSize: 17, height: 1.6),
@@ -1927,7 +2285,7 @@ class _SupportPageState extends State<SupportPage> {
   Widget build(BuildContext context) => PageFrame(
         title: session.tr('本地客服助手', 'ローカルサポート'),
         child: ListView(
-          padding: const EdgeInsets.all(20),
+          padding: const EdgeInsets.all(14),
           children: [
             Text(
               session.tr(
@@ -1970,7 +2328,7 @@ class _SupportPageState extends State<SupportPage> {
             if (answer.isNotEmpty)
               Card(
                 child: Padding(
-                  padding: const EdgeInsets.all(20),
+                  padding: const EdgeInsets.all(14),
                   child: Text(answer),
                 ),
               ),
@@ -2001,7 +2359,7 @@ class _ChatPageState extends State<ChatPage> {
         child: LoadView(
           load: () => session.get('/messages/${widget.lid}/${widget.bid}'),
           builder: (context, data, reload) => ListView(
-            padding: const EdgeInsets.all(20),
+            padding: const EdgeInsets.all(14),
             children: [
               for (final m in data['items'])
                 Align(
@@ -2090,7 +2448,7 @@ class AdminPage extends StatelessWidget {
     return PageFrame(
       title: session.tr('管理后台', '運営管理'),
       child: ListView(
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.all(14),
         children: [
           for (final e in entries.entries)
             ListTile(
@@ -2114,7 +2472,7 @@ class AdminSection extends StatelessWidget {
         child: LoadView(
           load: () => session.get('/admin/$section'),
           builder: (context, data, reload) => ListView(
-            padding: const EdgeInsets.all(20),
+            padding: const EdgeInsets.all(14),
             children: [
               simulation(),
               if (section == 'profit')
@@ -2591,9 +2949,9 @@ class _PublishPageState extends State<PublishPage> {
       child: loading
           ? const Center(child: CircularProgressIndicator())
           : ListView(
-              padding: const EdgeInsets.all(20),
+              padding: const EdgeInsets.all(14),
               children: [
-                heading(session.tr('让好物继续生活', 'よいものを次の暮らしへ')),
+                heading(session.tr('发布商品', '商品を出品')),
                 Text(
                   session.tr(
                     '最多 10 张，第一张为封面。识别均为本地推测；不能仅凭照片确认型号或真伪。',
@@ -2616,16 +2974,20 @@ class _PublishPageState extends State<PublishPage> {
                     Expanded(
                       child: FilledButton.icon(
                         onPressed: busy ? null : () => pick(ImageSource.camera),
+                        style: FilledButton.styleFrom(
+                            minimumSize: const Size(0, 80)),
                         icon: const Icon(Icons.camera_alt_outlined),
-                        label: Text(session.tr('后置相机', '背面カメラ')),
+                        label: Text(session.tr('拍照', '撮影')),
                       ),
                     ),
                     const SizedBox(width: 10),
                     Expanded(
                       child: OutlinedButton.icon(
                         onPressed: busy ? null : gallery,
+                        style: OutlinedButton.styleFrom(
+                            minimumSize: const Size(0, 80)),
                         icon: const Icon(Icons.photo_library_outlined),
-                        label: Text(session.tr('相册', '写真')),
+                        label: Text(session.tr('从相册选', '写真から選択')),
                       ),
                     ),
                   ],
@@ -2933,7 +3295,7 @@ class PhotoManager extends StatelessWidget {
           builder: (context, data, reload) {
             final photos = List<Json>.from(data['photos']);
             return ListView(
-              padding: const EdgeInsets.all(20),
+              padding: const EdgeInsets.all(14),
               children: [
                 Text(session.tr('最多 10 张。第一张为封面。', '10枚まで。1枚目がカバーです。')),
                 for (final indexed in photos.indexed)
