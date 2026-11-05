@@ -65,6 +65,14 @@ flutter build apk --debug --target-platform android-arm64 \
 
 iOS bundle ID 为 `com.yunolife.shop.dev`。真机需有效开发签名和设备信任。
 日常试用使用 Release 构建；Debug 仅用于 Flutter/Xcode 调试。
+直接安装本地 `.app` 前，可在 `mobile/` 执行：
+
+```sh
+python3 tool/prepare_ios_app.py build/ios/iphoneos/Runner.app
+```
+
+此工具只规范目录和文件访问权限，并执行签名深度校验，不改签名内容、
+不撤销证书、不删除手机数据，也不能修复过期或被撤销的证书。
 Android Debug 允许局域网 HTTP；正式发布配置不开放全局明文 HTTP。
 试用包签名不代表商店上架签名。
 
@@ -79,7 +87,8 @@ Android Debug 允许局域网 HTTP；正式发布配置不开放全局明文 HTT
 .venv/bin/python -m pytest tests/ -q
 # mobile/
 flutter test
-flutter drive --profile --driver test_driver/native_driver.dart \
+flutter drive --profile --keep-app-running --no-uninstall-first \
+  --driver test_driver/native_driver.dart \
   --target integration_test/native_flow_test.dart -d 设备UDID \
   --dart-define=API_BASE_URL=http://Mac的局域网IP:8003
 ```
@@ -87,6 +96,8 @@ flutter drive --profile --driver test_driver/native_driver.dart \
 设备测试应使用独立的 `YUNO_DB_PATH`、`YUNO_UPLOAD_DIR`。
 流程测试中的 picker 是测试专用图片入口，用于验证后置相机意图、10 图预览、
 实际上传和发布；它不能证明相机硬件、权限弹窗或 HEIC 已验收。
+测试前先在同一 bundle ID 的 App 中允许本地网络访问；Flutter 组件测试不能点击 iOS 系统权限弹窗。
+保留 `--keep-app-running --no-uninstall-first`，避免测试结束卸载 App，或在重装时重置权限。
 测试后重新安装以 `lib/main.dart` 为入口的正常 Release 包。
 
 最终结果见 [NATIVE_ACCEPTANCE.md](NATIVE_ACCEPTANCE.md)。真实收款、真实物流、

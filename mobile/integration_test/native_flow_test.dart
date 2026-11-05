@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:image_picker_platform_interface/image_picker_platform_interface.dart';
 import 'package:yuno_life/main.dart' as app;
@@ -40,9 +41,18 @@ void main() {
         'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGM4fvkgAATAAlwVeCj7AAAAAElFTkSuQmCC'));
     final picker = FixturePicker(XFile(photo.path));
     ImagePickerPlatform.instance = picker;
+    // Do not let a saved trial server redirect acceptance traffic to daily data.
+    await (await SharedPreferences.getInstance()).remove('server');
     await app.session.signOut(remote: false);
     await tester.pumpWidget(const app.YunoApp());
     await tester.pumpAndSettle(const Duration(milliseconds: 200));
+    for (var i = 0;
+        i < 100 && find.byType(NavigationDestination).evaluate().isEmpty;
+        i++) {
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+      await tester.pump();
+    }
+    expect(find.byType(NavigationDestination), findsNWidgets(5));
     await app.session.setLanguage('zh');
     await tester.pumpAndSettle();
     Future<void> tapText(String text) async {
@@ -66,8 +76,19 @@ void main() {
     await tester.enterText(field('邮箱'), 'phone-$stamp@acceptance.invalid');
     await tester.enterText(field('密码'), secret);
     await tester.enterText(field('昵称'), '验收 DEMO');
+    FocusManager.instance.primaryFocus?.unfocus();
+    await tester.pumpAndSettle();
     await tapText('注册');
-    expect(app.session.signedIn, isTrue);
+    for (var i = 0; i < 50 && !app.session.signedIn; i++) {
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+      await tester.pump(const Duration(milliseconds: 200));
+    }
+    final errors = tester
+        .widgetList<Text>(find.byType(Text))
+        .map((w) => w.data ?? '')
+        .where((text) => RegExp('失败|要求|未完成|过期|权限|频繁').hasMatch(text))
+        .join('; ');
+    expect(app.session.signedIn, isTrue, reason: errors);
     await tester.tap(find.byType(NavigationDestination).at(2));
     await tester.pumpAndSettle();
     await tapText('拍照发布');
