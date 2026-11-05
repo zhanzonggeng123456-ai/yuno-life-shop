@@ -44,7 +44,7 @@ token 与服务器地址绑定，更换服务器会清除旧会话。语言偏�
 ## 运行与构建
 
 需要 Python 3.10+（推荐 3.12）、Flutter stable、Xcode / CocoaPods、
-Android SDK 36、JDK 17、NDK `27.1.12297006`。首次双平台构建建议预留 8 GB 以上。
+Android SDK 36、JDK 17、NDK `28.2.13676358`。首次双平台构建建议预留 8 GB 以上。
 
 仓库根目录启动后端，手机与 Mac 必须在可互访的局域网：
 

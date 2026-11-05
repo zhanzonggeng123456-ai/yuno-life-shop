@@ -15,7 +15,8 @@
 | iOS 安装 | Release 中间产物经本机签名深度验证，可直接安装到连接的 iPhone 16e |
 | iOS 启动 | 系统拒绝启动，返回签名、entitlements 或未信任 profile 错误；重新签名和安装后仍未解除。不能判为通过 |
 | iPhone 原生流程测试 | Debug 打包、Profile 复制阶段均遇到 `No space left on device`，没有执行到流程断言；不是通过 |
-| Android 构建 | Gradle 报 `No space left on device`；没有已验收的 APK 或安装运行证据 |
+| Android 构建 | 清理空间后构建成功；统一 NDK 28.2 后再次构建成功；arm64 Debug APK 约 87 MB，`apksigner verify` 通过 |
+| Android 运行 | 已创建独立 YunoNativeAcceptance 测试设备，不使用 Nino AVD；模拟器要求约 7.2 GiB 可用空间，当前不足，尚未启动及执行流程测试 |
 | 相机/相册硬件 | 未验收，测试 picker 不能替代硬件测试 |
 | 商店/真实支付/真实物流 | 明确不做，界面均作模拟说明 |
 
@@ -26,8 +27,16 @@
 - `flutter-analyze.log` / `flutter-tests.log`
 - `ios-build.log` / `ios-release-build.log` / `ios-final-build.log`
 - `iphone-integration.log` / `iphone-profile-integration.log`
-- `android-build.log` / `android-retry-build.log` / `android-final-build.log`
+- `android-build.log` / `android-retry-build.log` / `android-final-build.log` / `android-space-retry.log` / `android-current-build.log` / `android-emulator.log`
 
-需要完成的后续验收：释放至少 8 GB 构建空间；定位手机实际的签名/信任提示；
-恢复 iOS 正常启动后运行设备流程测试及真实相机操作；构建并在 Android 上安装运行；
+2026-11-05 补充：已清理重复下载的 GitHub Desktop，以及无用户 App、已关机的
+iOS 27.1 默认模拟器所用系统镜像，清理后磁盘可用约 8.5 GiB。Nino 源码、
+三份归档、Nino iPhone 17 Pro 设备数据及其 iOS 26.5 系统镜像均保留。
+Android 构建补齐 NDK 28.2 与插件所需平台版本后，清掉 Yuno 构建中间文件，
+保留 `outputs/yuno-life-android-arm64-debug.apk`（安装包不纳入 Git）。
+此时可用空间约 3.7 GiB；构建工具不是 Nino 文件，Nino 数据保持不动。
+用户确认手机显示“无法验证 App”或“完整性”提示；具体根因尚未确认。
+
+需要完成的后续验收：定位手机实际的签名/完整性错误；
+恢复 iOS 正常启动后运行设备流程测试及真实相机操作；在 Android 上安装运行；
 最后重新安装正常试用包并核对对应源码版本。测试数据与日常本地数据必须隔离。
