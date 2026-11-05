@@ -4,6 +4,12 @@ AI 驱动、全品类、支持多种交易模式的中古交易平台。
 首期运营区域:埼玉县坂户市,后续可扩展至鹤岛、川越、东松山。
 货币 JPY,时区 Asia/Tokyo。
 
+## 原生手机 App（Flutter）
+
+新增 `mobile/` iOS / Android 原生界面与 `/api/v1` JSON 接口，App 不使用 WebView。
+实现及构建说明见 [docs/NATIVE_APP.md](docs/NATIVE_APP.md)，实际验证范围与阻塞项见
+[docs/NATIVE_ACCEPTANCE.md](docs/NATIVE_ACCEPTANCE.md)。原有业务模块与 HTML 路由保持兼容。
+
 ## 一条命令启动
 
 ```bash

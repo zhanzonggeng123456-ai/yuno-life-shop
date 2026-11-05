@@ -3904,3 +3904,7 @@ def me_extra(request: Request):
     finally:
         c.close()
 
+
+# Native mobile boundary; existing HTML routes and business logic stay intact.
+from .api_v1 import router as mobile_api_router
+app.include_router(mobile_api_router)
