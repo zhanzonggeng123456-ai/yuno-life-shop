@@ -7,6 +7,7 @@ import 'package:http/testing.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:yuno_life/main.dart';
 import 'package:yuno_life/labels.dart';
+import 'package:yuno_life/design.dart';
 
 void main() {
   setUp(() async {
@@ -56,6 +57,47 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('登录 / 注册'), findsOneWidget);
     expect(tester.takeException(), isNull);
+  });
+  testWidgets(
+      'two-column market cards fit long bilingual titles on a narrow screen',
+      (tester) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    session.client = MockClient((request) async => http.Response(
+        jsonEncode({
+          'items': List.generate(
+              2,
+              (i) => {
+                    'id': i + 1,
+                    'title_zh': '保存良好的家用二手微波炉，附使用说明与配件',
+                    'title_ja': '説明書と付属品付きの状態の良い中古電子レンジ',
+                    'price': 6000,
+                    'condition_grade': 'good',
+                    'photos': [],
+                    'demo': 1,
+                  })
+        }),
+        200,
+        headers: {'content-type': 'application/json'}));
+    for (final language in ['zh', 'ja']) {
+      session.language = language;
+      await tester.pumpWidget(MaterialApp(
+          key: ValueKey(language),
+          theme: yunoTheme(),
+          home: const HomeShell()));
+      await tester.pumpAndSettle();
+      await tester.scrollUntilVisible(find.byType(ListingCard).first, 180,
+          scrollable: find.byType(Scrollable).first);
+      await tester.pumpAndSettle();
+      expect(find.byType(ListingCard), findsNWidgets(2));
+      final cards = find.byType(ListingCard);
+      expect(tester.getSize(cards.first).width, lessThan(190));
+      expect(
+          tester.getTopLeft(cards.first).dy, tester.getTopLeft(cards.last).dy);
+      expect(tester.takeException(), isNull);
+    }
   });
   testWidgets(
       'login is a native password form and empty accounts are not prefilled',

@@ -7,6 +7,7 @@ import 'package:image_picker/image_picker.dart';
 
 import 'session.dart';
 import 'labels.dart';
+import 'design.dart';
 
 final session = Session();
 void main() {
@@ -37,16 +38,7 @@ class _YunoAppState extends State<YunoApp> {
           locale: Locale(session.zh ? 'zh' : 'ja'),
           supportedLocales: const [Locale('zh'), Locale('ja')],
           localizationsDelegates: GlobalMaterialLocalizations.delegates,
-          theme: ThemeData(
-            useMaterial3: true,
-            colorScheme:
-                ColorScheme.fromSeed(seedColor: const Color(0xff285747)),
-            scaffoldBackgroundColor: const Color(0xfff7f8f3),
-            inputDecorationTheme: const InputDecorationTheme(
-              border: OutlineInputBorder(),
-            ),
-            cardTheme: const CardThemeData(elevation: 0),
-          ),
+          theme: yunoTheme(),
           home: FutureBuilder(
             future: ready,
             builder: (context, snapshot) {
@@ -221,31 +213,42 @@ class _HomeShellState extends State<HomeShell> {
             ][tab],
           ),
         ),
-        bottomNavigationBar: NavigationBar(
-          selectedIndex: tab,
-          onDestinationSelected: (i) => setState(() => tab = i),
-          destinations: [
-            NavigationDestination(
-              icon: const Icon(Icons.storefront_outlined),
-              label: session.tr('市场', '市場'),
-            ),
-            NavigationDestination(
-              icon: const Icon(Icons.insights_outlined),
-              label: session.tr('成交行情', '相場'),
-            ),
-            NavigationDestination(
-              icon: const Icon(Icons.add_circle_outline),
-              label: session.tr('交易', '取引'),
-            ),
-            NavigationDestination(
-              icon: const Icon(Icons.receipt_long_outlined),
-              label: session.tr('订单', '注文'),
-            ),
-            NavigationDestination(
-              icon: const Icon(Icons.person_outline),
-              label: session.tr('个人中心', 'マイページ'),
-            ),
-          ],
+        bottomNavigationBar: DecoratedBox(
+          decoration: const BoxDecoration(
+              border: Border(top: BorderSide(color: YunoColors.line))),
+          child: NavigationBar(
+            selectedIndex: tab,
+            onDestinationSelected: (i) => setState(() => tab = i),
+            destinations: [
+              NavigationDestination(
+                icon: const Icon(Icons.storefront_outlined),
+                label: session.tr('市场', '市場'),
+              ),
+              NavigationDestination(
+                icon: const Icon(Icons.insights_outlined),
+                label: session.tr('成交行情', '相場'),
+              ),
+              NavigationDestination(
+                icon: Container(
+                  width: 38,
+                  height: 32,
+                  decoration: BoxDecoration(
+                      color: YunoColors.ink,
+                      borderRadius: BorderRadius.circular(12)),
+                  child: const Icon(Icons.add, color: Colors.white, size: 23),
+                ),
+                label: session.tr('交易', '取引'),
+              ),
+              NavigationDestination(
+                icon: const Icon(Icons.receipt_long_outlined),
+                label: session.tr('订单', '注文'),
+              ),
+              NavigationDestination(
+                icon: const Icon(Icons.person_outline),
+                label: session.tr('个人中心', 'マイページ'),
+              ),
+            ],
+          ),
         ),
       );
 }
@@ -382,16 +385,43 @@ class _MarketPageState extends State<MarketPage> {
           return ListView(
             padding: const EdgeInsets.all(20),
             children: [
-              heading(
-                'Yuno Life',
-                subtitle: session.tr('坂户市 · 让好物继续生活', '坂戸市・よいものを次の暮らしへ'),
-              ),
+              Row(children: [
+                Container(
+                    width: 36,
+                    height: 36,
+                    decoration: BoxDecoration(
+                        color: YunoColors.ink,
+                        borderRadius: BorderRadius.circular(12)),
+                    alignment: Alignment.center,
+                    child: const Text('y',
+                        style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 29,
+                            height: 1,
+                            fontFamily: 'Georgia'))),
+                const SizedBox(width: 10),
+                const Text('Yuno Life',
+                    style: TextStyle(
+                        fontSize: 23,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: -0.8)),
+                const Spacer(),
+                const Icon(Icons.location_on_outlined,
+                    size: 14, color: YunoColors.muted),
+                const SizedBox(width: 3),
+                Text(session.tr('坂户市', '坂戸市'),
+                    style:
+                        const TextStyle(fontSize: 12, color: YunoColors.muted)),
+              ]),
+              const SizedBox(height: 22),
               TextField(
                 controller: query,
                 onSubmitted: (_) => setState(() => version++),
                 decoration: InputDecoration(
                   prefixIcon: const Icon(Icons.search),
-                  labelText: session.tr('搜索中古好物', '中古品を検索'),
+                  hintText: session.tr('寻找下一件心动好物', '次のお気に入りを見つける'),
+                  hintStyle:
+                      const TextStyle(fontSize: 14, color: YunoColors.muted),
                   suffixIcon: IconButton(
                     icon: const Icon(Icons.tune),
                     onPressed: () async {
@@ -502,10 +532,105 @@ class _MarketPageState extends State<MarketPage> {
                   ),
                 ),
               ),
-              simulation(),
+              const SizedBox(height: 20),
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                    color: YunoColors.sage,
+                    borderRadius: BorderRadius.circular(22)),
+                child: Row(children: [
+                  Expanded(
+                      child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                        Text(session.tr('旧物新生，生活常新', 'いいものと、次の暮らしへ。'),
+                            style: const TextStyle(
+                                fontSize: 20,
+                                height: 1.4,
+                                fontWeight: FontWeight.w600,
+                                letterSpacing: -0.5)),
+                        const SizedBox(height: 8),
+                        Text(session.tr('从身边开始，发现值得留下的好物。', 'ご近所から、長く愛せるものを。'),
+                            style: const TextStyle(
+                                fontSize: 12, color: Color(0xff667866))),
+                      ])),
+                  const SizedBox(width: 16),
+                  Container(
+                      width: 52,
+                      height: 64,
+                      decoration: BoxDecoration(
+                          color: const Color(0xffd6e1cf),
+                          borderRadius: BorderRadius.circular(24)),
+                      child: const Icon(Icons.eco_outlined,
+                          color: Color(0xff547252), size: 30)),
+                ]),
+              ),
+              const SizedBox(height: 18),
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(children: [
+                  for (final c in <Json>[
+                    {'slug': '', 'name_zh': '全部', 'name_ja': 'すべて'},
+                    ...List<Json>.from(session.config['categories'] ?? [])
+                  ])
+                    Padding(
+                        padding: const EdgeInsets.only(right: 8),
+                        child: ChoiceChip(
+                          label: Text(session.name(c)),
+                          labelStyle: TextStyle(
+                              fontSize: 12,
+                              color: category == c['slug']
+                                  ? Colors.white
+                                  : YunoColors.muted),
+                          selected: category == c['slug'],
+                          showCheckmark: false,
+                          selectedColor: YunoColors.ink,
+                          backgroundColor: Colors.white,
+                          side: BorderSide(
+                              color: category == c['slug']
+                                  ? YunoColors.ink
+                                  : YunoColors.line),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(24)),
+                          onSelected: (_) => setState(() {
+                            category = c['slug'];
+                            version++;
+                          }),
+                        )),
+                ]),
+              ),
+              const SizedBox(height: 22),
+              Row(children: [
+                Text(session.tr('在售好物', '出品中の商品'),
+                    style: const TextStyle(
+                        fontSize: 18, fontWeight: FontWeight.w600)),
+                const Spacer(),
+                Text(session.tr('${items.length} 件', '${items.length} 点'),
+                    style:
+                        const TextStyle(fontSize: 12, color: YunoColors.muted)),
+              ]),
+              const SizedBox(height: 14),
               if (items.isEmpty) empty(),
-              for (final item in items)
-                ListingCard(item: item, onReturn: reload),
+              LayoutBuilder(builder: (context, constraints) {
+                final columns = constraints.maxWidth < 300 ? 1 : 2;
+                final cardWidth =
+                    (constraints.maxWidth - (columns - 1) * 12) / columns;
+                return GridView.builder(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  itemCount: items.length,
+                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: columns,
+                    crossAxisSpacing: 12,
+                    mainAxisSpacing: 12,
+                    mainAxisExtent: cardWidth / 1.1 +
+                        134 * MediaQuery.textScalerOf(context).scale(14) / 14,
+                  ),
+                  itemBuilder: (_, i) =>
+                      ListingCard(item: items[i], onReturn: reload),
+                );
+              }),
+              simulation(),
             ],
           );
         },
@@ -520,57 +645,96 @@ class ListingCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final photos = List<Json>.from(item['photos'] ?? []);
     return Card(
-      margin: const EdgeInsets.only(bottom: 14),
+      margin: EdgeInsets.zero,
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: () async {
           await open(
-            context,
-            DetailPage(
-              path: '/listings/${item['id']}',
-              title: session.title(item),
-            ),
-          );
+              context,
+              DetailPage(
+                  path: '/listings/${item['id']}', title: session.title(item)));
           onReturn?.call();
         },
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            if (photos.isNotEmpty) imageView(photos.first['url']),
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Wrap(
-                    spacing: 8,
-                    children: [
-                      if (item['is_platform_owned'] == 1)
-                        Chip(label: Text(session.tr('平台自营', '自社販売'))),
-                      if (item['demo'] == 1) const Chip(label: Text('DEMO')),
-                    ],
-                  ),
-                  Text(
-                    session.title(item),
-                    style: const TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    yen(item['effective_price'] ?? item['price']),
-                    style: const TextStyle(
-                      fontSize: 24,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  Text(status(session, item['condition_grade'])),
-                ],
-              ),
-            ),
-          ],
-        ),
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              AspectRatio(
+                  aspectRatio: 1.1,
+                  child: Stack(fit: StackFit.expand, children: [
+                    if (photos.isNotEmpty)
+                      imageView(photos.first['url'])
+                    else
+                      Container(
+                          color: const Color(0xffeef0e9),
+                          child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                const Icon(Icons.photo_camera_outlined,
+                                    size: 28, color: Color(0xffa2ae9f)),
+                                const SizedBox(height: 7),
+                                Text(session.tr('暂无实拍', '写真は未登録'),
+                                    style: const TextStyle(
+                                        fontSize: 10, color: YunoColors.muted)),
+                              ])),
+                    if (item['demo'] == 1 || item['is_platform_owned'] == 1)
+                      Positioned(
+                          top: 10,
+                          left: 10,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 7, vertical: 3),
+                            decoration: BoxDecoration(
+                                color: Colors.white.withValues(alpha: 0.93),
+                                borderRadius: BorderRadius.circular(6)),
+                            child: Text(
+                                item['demo'] == 1
+                                    ? 'DEMO'
+                                    : session.tr('平台自营', '自社販売'),
+                                style: const TextStyle(
+                                    fontSize: 9, fontWeight: FontWeight.w600)),
+                          )),
+                    if (photos.length > 1)
+                      Positioned(
+                          bottom: 8,
+                          right: 8,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                                color: Colors.black45,
+                                borderRadius: BorderRadius.circular(6)),
+                            child: Text('${photos.length}',
+                                style: const TextStyle(
+                                    color: Colors.white, fontSize: 10)),
+                          )),
+                  ])),
+              Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(session.title(item),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                                fontSize: 14,
+                                height: 1.4,
+                                fontWeight: FontWeight.w500)),
+                        const SizedBox(height: 8),
+                        Text(yen(item['effective_price'] ?? item['price']),
+                            style: const TextStyle(
+                                fontSize: 21,
+                                letterSpacing: -0.5,
+                                fontWeight: FontWeight.w600)),
+                        const SizedBox(height: 3),
+                        Text(status(session, item['condition_grade']),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                                fontSize: 11, color: YunoColors.muted)),
+                      ])),
+            ]),
       ),
     );
   }
@@ -1158,12 +1322,33 @@ class AccountListPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (!session.signedIn) {
-      return Center(
-        child: FilledButton(
-          onPressed: () => open(context, const AuthPage()),
-          child: Text(session.tr('登录查看', 'ログインして表示')),
-        ),
-      );
+      return ListView(padding: const EdgeInsets.all(20), children: [
+        heading(title),
+        const SizedBox(height: 64),
+        Center(
+            child: Container(
+                width: 88,
+                height: 88,
+                decoration: BoxDecoration(
+                    color: YunoColors.sage,
+                    borderRadius: BorderRadius.circular(30)),
+                child: Icon(resourceIcon(kind),
+                    size: 34, color: const Color(0xff7b9276)))),
+        const SizedBox(height: 24),
+        Center(
+            child: Text(session.tr('每一次好物交接，都在这里', 'ものがつなぐ、取引の記録'),
+                style: const TextStyle(
+                    fontSize: 17, fontWeight: FontWeight.w500))),
+        const SizedBox(height: 8),
+        Center(
+            child: Text(session.tr('登录后查看你的记录', 'ログインして履歴を確認'),
+                style: const TextStyle(fontSize: 13, color: YunoColors.muted))),
+        const SizedBox(height: 24),
+        Center(
+            child: FilledButton(
+                onPressed: () => open(context, const AuthPage()),
+                child: Text(session.tr('登录查看', 'ログインして表示')))),
+      ]);
     }
     return LoadView(
       load: () => session.get('/me'),
@@ -1225,6 +1410,19 @@ class AccountListPage extends StatelessWidget {
   }
 }
 
+IconData resourceIcon(String key) => switch (key) {
+      'listings' => Icons.inventory_2_outlined,
+      'orders' => Icons.receipt_long_outlined,
+      'offers' => Icons.chat_bubble_outline,
+      'buybacks' => Icons.sell_outlined,
+      'service_orders' => Icons.home_outlined,
+      'deliveries' => Icons.local_shipping_outlined,
+      'oneclick_drafts' => Icons.edit_note_outlined,
+      'threads' => Icons.forum_outlined,
+      'auctions' => Icons.gavel_outlined,
+      _ => Icons.cleaning_services_outlined,
+    };
+
 class TradePage extends StatelessWidget {
   const TradePage({super.key});
   @override
@@ -1236,18 +1434,29 @@ class TradePage extends StatelessWidget {
             subtitle: session.tr('拍照，让闲置找到新主人', '写真から、次の持ち主へ'),
           ),
           Card(
+            color: YunoColors.sage,
             child: Padding(
               padding: const EdgeInsets.all(20),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  const Icon(Icons.camera_alt_outlined, size: 64),
+                  Align(
+                      alignment: Alignment.centerLeft,
+                      child: Container(
+                        width: 48,
+                        height: 48,
+                        decoration: BoxDecoration(
+                            color: YunoColors.ink,
+                            borderRadius: BorderRadius.circular(16)),
+                        child: const Icon(Icons.camera_alt_outlined,
+                            size: 24, color: Colors.white),
+                      )),
                   const SizedBox(height: 16),
                   Text(
                     session.tr('拍照 · AI 辅助发布', '撮影・AI出品サポート'),
                     style: const TextStyle(
-                      fontSize: 22,
-                      fontWeight: FontWeight.bold,
+                      fontSize: 20,
+                      fontWeight: FontWeight.w600,
                     ),
                   ),
                   const SizedBox(height: 8),
@@ -1279,6 +1488,7 @@ class TradePage extends StatelessWidget {
           ])
             Card(
               child: ListTile(
+                leading: Icon(resourceIcon(pair[0]), size: 21),
                 title: Text(pair[1]),
                 trailing: const Icon(Icons.chevron_right),
                 onTap: () async {
@@ -1296,10 +1506,18 @@ class TradePage extends StatelessWidget {
                 },
               ),
             ),
+          const SizedBox(height: 18),
           heading(session.tr('本地生活服务', '地域の暮らしサービス')),
           for (final e in (session.config['services'] as Map? ?? {}).entries)
             Card(
               child: ListTile(
+                leading: Icon(
+                    e.key == 'local_delivery'
+                        ? Icons.local_shipping_outlined
+                        : e.key == 'transport_small'
+                            ? Icons.move_to_inbox_outlined
+                            : Icons.cleaning_services_outlined,
+                    size: 22),
                 title: Text(session.name(Map<String, dynamic>.from(e.value))),
                 subtitle: Text(
                   '${yen(e.value['price'])}${e.value['unit'] == 'hour' ? session.tr('/小时', '/時間') : session.tr('/趟起', '/回〜')}${e.key == 'transport_small' ? session.tr(' · 10kg 以内', '・10kg以内') : ''}',
@@ -1494,15 +1712,37 @@ class ProfilePage extends StatelessWidget {
   Widget build(BuildContext context) => ListView(
         padding: const EdgeInsets.all(20),
         children: [
-          heading(
-            session.tr('个人中心', 'マイページ'),
-            subtitle: session.me?['display_name'],
-          ),
+          Row(children: [
+            Container(
+                width: 52,
+                height: 52,
+                decoration: BoxDecoration(
+                    color: YunoColors.sage,
+                    borderRadius: BorderRadius.circular(18)),
+                child: const Icon(Icons.person_outline,
+                    color: YunoColors.ink, size: 28)),
+            const SizedBox(width: 14),
+            Expanded(
+                child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                  Text(
+                      session.me?['display_name'] ??
+                          session.tr('个人中心', 'マイページ'),
+                      style: const TextStyle(
+                          fontSize: 23, fontWeight: FontWeight.w600)),
+                  Text(session.tr('你的好物与生活记录', 'ものと暮らしの記録'),
+                      style: const TextStyle(
+                          fontSize: 12, color: YunoColors.muted)),
+                ])),
+          ]),
+          const SizedBox(height: 24),
           if (!session.signedIn)
             FilledButton(
               onPressed: () => open(context, const AuthPage()),
               child: Text(session.tr('登录 / 注册', 'ログイン・登録')),
             ),
+          const SizedBox(height: 16),
           DropdownButtonFormField<String>(
             initialValue: session.language,
             decoration: InputDecoration(labelText: session.tr('语言', '言語')),
@@ -1518,6 +1758,7 @@ class ProfilePage extends StatelessWidget {
               if (v != null) session.setLanguage(v);
             },
           ),
+          const SizedBox(height: 20),
           for (final kind in [
             'listings',
             'orders',
@@ -1529,6 +1770,7 @@ class ProfilePage extends StatelessWidget {
             'threads',
           ])
             ListTile(
+              leading: Icon(resourceIcon(kind), size: 21),
               title: Text(AccountListPage(kind: kind).title),
               trailing: const Icon(Icons.chevron_right),
               onTap: () async {
@@ -1580,6 +1822,10 @@ class ProfilePage extends StatelessWidget {
               child: Text(session.tr('退出登录', 'ログアウト')),
             ),
           simulation(),
+          const Center(
+              child: Text('Yuno Life · 0.2.0 (3)',
+                  style: TextStyle(fontSize: 11, color: YunoColors.muted))),
+          const SizedBox(height: 16),
         ],
       );
 }
