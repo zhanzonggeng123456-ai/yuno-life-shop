@@ -13,8 +13,8 @@
 | Flutter 组件测试 | 12 项通过：原有 10 项，加上 320 宽/1.5 倍字体中日文布局、相册剩余数量及满额限制；静态检查无问题 |
 | iOS 编译 | 清理空间后 Profile 与当前正常 Release 均完整构建成功；当前 0.4.0 Release 44.7 MB（含离线衬线字体） |
 | iOS 安装 | Release 中间产物经本机签名深度验证，可直接安装到连接的 iPhone 16e |
-| iOS 启动 | 0.4.0（5）曾成功启动并取得新版主页截图；本次复验安装修复包后，系统再次拒绝启动，返回签名/权限/未信任描述文件错误。因此当前启动不通过，不能沿用历史截图作为本次通过证据 |
-| iPhone 原生流程测试 | 脚本已更新到当前交易菜单及照片流程；本次 Profile 包未启动，VM 服务未连接，业务断言未执行。设备截图为“无法验证 App”，状态栏有飞行模式图标；Mac 界面工具同时报告锁屏。已请求用户处理，结果未确认，不计为通过 |
+| iOS 启动 | 解锁及恢复联网后的复验，系统接受 0.4.0（5）启动；Profile 测试包也已启动并连接 VM 服务。之前签名/信任拒绝记录保留在下方，不能代表后续每次安装均可靠启动 |
+| iPhone 原生流程测试 | 已连接真实设备并执行到 ACCEPTANCE: boot；发现同一 iPhone 上另有 Nino 的 xcodebuild 自动测试争用前台。已主动停止 Yuno 测试、恢复正常 Release，未终止 Nino。注册及后续流程仍未通过，待设备可独占时重跑 |
 | Android 构建 | 仅保留历史 0.1.0（2）arm64 Debug APK 约 87 MB，`apksigner verify` 通过；0.4.0 未构建。当前不足 1 GiB 空间，且本项目固定的 NDK 28.2 已在之前清理，需要重新安装 |
 | Android 运行 | 已创建独立 YunoNativeAcceptance 测试设备，不使用 Nino AVD；模拟器要求约 7.2 GiB 可用空间，当前不足，尚未启动及执行流程测试 |
 | 相机/相册硬件 | 未验收，测试 picker 不能替代硬件测试 |
@@ -98,3 +98,12 @@ GitHub 已知写入权限不足，本轮代码保留在本地分支，不声称�
 - 未执行新版 Android 构建及运行、真实相机/相册权限、全部交易客户端流程。空间与设备阻断解除后仍需继续；Nino 源码、归档、设备数据及共享签名配置均未修改。
 
 本次改动保存在本地 `codex/flutter-native-app`。GitHub 写权限此前已拒绝，未声称推送成功。
+
+### 用户解锁并恢复联网后的续验
+
+- `outputs/acceptance-unlocked-launch.log` 记录系统接受正常包启动。截图 `acceptance-unlocked.png` 为应用切换过渡画面，可见 Yuno 新市场页面，不能作为完整页面视觉验收截图。
+- `outputs/acceptance-unlocked-flow.log` 记录 Profile 包构建安装、VM Service 连接成功，以及真实设备的 `ACCEPTANCE: boot`；8003 日志也记录来自手机的配置、行情、商品请求。
+- 后续截图反复显示 Nino。只读进程检查确认另一项 `xcodebuild test-without-building` 正在同一 UDID 上运行 `NinoSmoke/Smoke/testNormalAppRemoteUI40331`，因此不能同时可靠执行两项前台测试。
+- 主动中断本项目 Flutter drive，日志中的 Service has disappeared 是停止测试后连接消失，不据此判定业务崩溃；注册、照片、AI、上架等后续阶段均不计通过。未终止或修改 Nino 测试。
+- 已从最终正常构建的 `mobile/build/ios/Release-iphoneos/Runner.app` 恢复安装 0.4.0（5），签名深度校验及安装成功；没有留下 integration_test 测试包。恢复安装日志 `outputs/acceptance-unlocked-restored.log`。为避免争抢设备，恢复后未再次强制拉起应用。
+- 已请求用户在 Nino 测试结束或由对应任务暂停后告知，再继续 Yuno 真机验收。完整验收结论仍为未通过。
