@@ -58,7 +58,8 @@ def category_stats(conn):
             if d is not None]
         follows = conn.execute(
             "SELECT COUNT(*) FROM listing_follows f JOIN listings l "
-            "ON l.id=f.listing_id WHERE l.category_id=?", (cat["id"],)).fetchone()[0]
+            "ON l.id=f.listing_id WHERE l.category_id=? AND l.demo=0",
+            (cat["id"],)).fetchone()[0]
         out.append({
             "slug": cat["slug"], "name_ja": cat["name_ja"],
             "name_zh": cat["name_zh"], "listed": listed, "active": active,
@@ -133,6 +134,61 @@ def collectible_trend(conn):
     return out
 
 
+def listing_price_moves(conn):
+    """第 3 阶段行情双榜:按单个商品(不按品类)算涨跌。
+
+    依据(必须明码标注,调用方须展示):
+      有 >=2 笔真实订单(已支付/已完成,演示订单排除)的商品,
+      涨跌 = 最近真实成交价 vs 首次成交价,样本量 = 该商品真实订单数。
+      不足 2 笔、首价 <=0 的商品不入榜,计入 insufficient/flat 说明,
+      绝不编造。挂牌价不计入涨跌;估价绝不走此数据(行情页展示平台
+      真实订单统计是允许的,但必须标注依据是平台订单)。
+    返回 {gainers(涨幅 pct 降序), losers(跌幅 pct 升序,即跌得最深在前),
+      up_count, down_count, flat_count, insufficient,
+      top_gainer, top_loser}。
+    """
+    listings = conn.execute(
+        "SELECT l.id, l.title_ja, l.title_zh, c.slug AS cat_slug, "
+        "c.name_zh AS cat_zh FROM listings l "
+        "JOIN categories c ON c.id=l.category_id "
+        "WHERE l.demo=0 ORDER BY l.id").fetchall()
+    gainers, losers = [], []
+    flat, insufficient = 0, 0
+    for row in listings:
+        orders = conn.execute(
+            "SELECT goods_amount FROM orders WHERE listing_id=? "
+            "AND status IN ('paid','completed') AND demo=0 "
+            "ORDER BY created_at, id", (row["id"],)).fetchall()
+        amounts = [o[0] for o in orders]
+        if len(amounts) < 2:
+            insufficient += 1
+            continue
+        first, latest = amounts[0], amounts[-1]
+        if first <= 0:
+            insufficient += 1
+            continue
+        change = latest - first
+        pct = round(change / first * 100, 1)
+        entry = {"listing_id": row["id"],
+                 "title_zh": row["title_zh"], "title_ja": row["title_ja"],
+                 "cat_slug": row["cat_slug"], "cat_zh": row["cat_zh"],
+                 "first": first, "latest": latest, "change": change,
+                 "pct": pct, "orders": len(amounts)}
+        if change > 0:
+            gainers.append(entry)
+        elif change < 0:
+            losers.append(entry)
+        else:
+            flat += 1
+    gainers.sort(key=lambda x: -x["pct"])
+    losers.sort(key=lambda x: x["pct"])
+    return {"gainers": gainers, "losers": losers,
+            "up_count": len(gainers), "down_count": len(losers),
+            "flat_count": flat, "insufficient": insufficient,
+            "top_gainer": gainers[0] if gainers else None,
+            "top_loser": losers[0] if losers else None}
+
+
 def profit_report(conn):
     """经营利润分析:营业额/GMV/商品销售额/毛利/费用/经营利润/净利润
     严格区分,服务收入与退款单独列示,绝不把代收交易额算成收入。"""
@@ -143,7 +199,8 @@ def profit_report(conn):
         "WHERE status='completed'").fetchone()[0]
     refunded = conn.execute(
         "SELECT COALESCE(SUM(o.total),0) FROM refunds r JOIN orders o "
-        "ON o.id=r.order_id WHERE r.status='approved'").fetchone()[0]
+        "ON o.id=r.order_id WHERE r.status='decided' "
+        "AND r.decision='approved'").fetchone()[0]
     turnover = s["gmv"] + service_income
     operating = s["operating_profit"] + service_income - refunded
     return {

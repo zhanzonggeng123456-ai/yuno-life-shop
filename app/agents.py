@@ -41,9 +41,9 @@ def review_agent(conn, listing):
     if cat:
         low, high, conf, basis = price_reference(conn, cat["slug"])
         if low and listing["price"] > high * 3:
-            flags.append("价格远高于同类参考区间,建议复核定价")
+            flags.append("价格远高于平台订单参考区间,建议复核定价")
         if low and listing["price"] < low * 0.3:
-            flags.append("价格远低于同类参考区间,建议复核是否为误标")
+            flags.append("价格远低于平台订单参考区间,建议复核是否为误标")
     verdict = "需人工复核" if flags else "通过(本地启发式,非最终结论)"
     return {"listing_id": listing["id"], "flags": flags, "verdict": verdict}
 
@@ -58,7 +58,10 @@ def pricing_agent(conn, listing):
                 "note": "暂无样本,无法给出定价建议,请勿编造参考价"}
     return {"listing_id": listing["id"], "suggestion": (low, high),
             "confidence": conf, "basis": basis,
-            "note": "参考区间,最终定价由卖家/运营决定"}
+            # 第 3 阶段收口:price_reference 只统计平台订单/挂牌,此处
+            # 明确标注为平台订单参考,绝不说成市场价。
+            "note": "平台订单参考区间(平台订单/挂牌统计,不是市场价),"
+                    "最终定价由卖家/运营决定"}
 
 
 def classify_agent(name, text):

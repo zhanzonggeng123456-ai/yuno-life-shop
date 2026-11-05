@@ -250,19 +250,19 @@ def test_service_order_and_combined_settlement():
                                          "qty": "1", "note": "打扫"})
     assert r.status_code == 200
     sid = dbrow("SELECT id,amount FROM service_orders ORDER BY id DESC LIMIT 1")
-    assert sid[1] == 4000
+    assert sid[1] == 3000  # 1500/h x 2h (stage 1 price)
     assert admin.post(f"/services/{sid[0]}/confirm").status_code == 200
     assert admin.post(f"/services/{sid[0]}/start").status_code == 200
     assert admin.post(f"/services/{sid[0]}/complete").status_code == 200
     assert dbrow("SELECT status FROM service_orders WHERE id=?", (sid[0],))[0] == "completed"
-    # 与买断同笔结算:买断报价1000,服务4000 -> 净付 -3000(分项列示)
+    # 与买断同笔结算:买断报价1000,服务500 -> 净付 500(分项列示)
     seller = reg(client(), "svs@test.jp", "卖家")
     lid = publish(seller, price=10000)
     seller.post("/buyback/new", data={"listing_id": str(lid)})
     bid = dbrow("SELECT id FROM buybacks ORDER BY id DESC LIMIT 1")[0]
     admin.post(f"/buyback/{bid}/review")
     admin.post(f"/buyback/{bid}/quote", data={"quote": "1000"})
-    seller.post("/services/new", data={"kind": "cleaning_item", "hours": "1",
+    seller.post("/services/new", data={"kind": "transport_small", "hours": "1",
                                        "qty": "1", "buyback_id": str(bid)})
     sid2 = dbrow("SELECT id FROM service_orders ORDER BY id DESC LIMIT 1")[0]
     r = seller.get(f"/services/{sid2}")
@@ -397,6 +397,6 @@ def test_new_feature_permissions():
     did = dbrow("SELECT id FROM deliveries ORDER BY id DESC LIMIT 1")[0]
     assert other.post(f"/deliveries/{did}/assign").status_code == 403
     user = reg(client(), "pmu@test.jp", "用户")
-    user.post("/services/new", data={"kind": "inspection", "hours": "1", "qty": "1"})
+    user.post("/services/new", data={"kind": "transport_small", "hours": "1", "qty": "1"})
     sid = dbrow("SELECT id FROM service_orders ORDER BY id DESC LIMIT 1")[0]
     assert other.get(f"/services/{sid}").status_code == 403

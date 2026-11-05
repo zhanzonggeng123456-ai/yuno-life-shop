@@ -126,8 +126,9 @@ def price_reference(conn, category_slug):
         return None, None, "none", ""
     rows = conn.execute(
         "SELECT goods_amount FROM orders WHERE status IN ('paid','completed') "
+        "AND demo=0 "
         "AND listing_id IN (SELECT id FROM listings WHERE category_id="
-        "(SELECT id FROM categories WHERE slug=?))",
+        "(SELECT id FROM categories WHERE slug=?) AND demo=0)",
         (category_slug,)).fetchall()
     amounts = [r[0] for r in rows]
     if len(amounts) >= 3:
@@ -135,8 +136,8 @@ def price_reference(conn, category_slug):
         return int(med * 0.8), int(med * 1.2), "medium", \
             f"based_on_completed:{len(amounts)}"
     act = conn.execute(
-        "SELECT price FROM listings WHERE status='active' AND category_id="
-        "(SELECT id FROM categories WHERE slug=?)",
+        "SELECT price FROM listings WHERE status='active' AND demo=0 "
+        "AND category_id=(SELECT id FROM categories WHERE slug=?)",
         (category_slug,)).fetchall()
     prices = [r[0] for r in act]
     if prices:
@@ -183,11 +184,13 @@ def stats(conn):
         r = conn.execute(sql, args).fetchone()
         return r[0] if r and r[0] is not None else 0
     gmv = one("SELECT SUM(goods_amount) FROM orders "
-              "WHERE status IN ('paid','completed')")
+              "WHERE status IN ('paid','completed') AND demo=0")
     platform_sales = one("SELECT SUM(goods_amount) FROM orders "
-                         "WHERE status IN ('paid','completed') AND is_platform_sale=1")
+                         "WHERE status IN ('paid','completed') AND is_platform_sale=1 "
+                         "AND demo=0")
     commission_income = one("SELECT SUM(commission) FROM orders "
-                            "WHERE status IN ('paid','completed') AND is_platform_sale=0")
+                            "WHERE status IN ('paid','completed') AND is_platform_sale=0 "
+                            "AND demo=0")
     sold_cost = one("SELECT SUM(cost) FROM inventory WHERE status='sold'")
     buyback_cost = one("SELECT SUM(acquisition_cost) FROM buybacks "
                        "WHERE status='completed'")

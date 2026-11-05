@@ -131,22 +131,17 @@ DEFAULT_SETTINGS = {
         "inventory_penalty_per_unit": 0.02,
         "max_inventory_penalty": 0.10,
     }, ensure_ascii=False),
-    # 增值服务目录:家居清洁 2000 日元/小时(可配置),其余按件计价
+    # 增值服务目录(最终三项,第 1 阶段定价):家居清洁 1500 日元/小时、
+    # 小件搬运 500 日元/趟(10kg 以内)、本地配送预约 150 日元/趟起。
+    # settings 是 INSERT OR IGNORE 初始化,已有库里的旧值不会被默认值覆盖,
+    # 因此展示与计价一律以 FINAL_SERVICE_PRICES 为准(见下),不读旧数据价格。
     "service_prices": json.dumps({
         "cleaning_home": {"name_ja": "ハウスクリーニング", "name_zh": "家居清洁",
-                          "unit": "hour", "price": 2000},
-        "cleaning_item": {"name_ja": "商品クリーニング", "name_zh": "商品清洁整理",
-                          "unit": "item", "price": 1000},
-        "inspection": {"name_ja": "商品検品", "name_zh": "商品检测",
-                       "unit": "item", "price": 1500},
-        "photo_listing": {"name_ja": "撮影・出品代行", "name_zh": "商品拍摄及代上架",
-                          "unit": "item", "price": 2000},
-        "appraisal_visit": {"name_ja": "出張査定", "name_zh": "上门估价",
-                            "unit": "item", "price": 3000},
+                          "unit": "hour", "price": 1500},
         "transport_small": {"name_ja": "小口運搬", "name_zh": "小件搬运",
-                            "unit": "item", "price": 2500},
-        "consignment": {"name_ja": "委託販売", "name_zh": "商品代售",
-                        "unit": "item", "price": 0},
+                            "unit": "item", "price": 500},
+        "local_delivery": {"name_ja": "地域配送予約", "name_zh": "本地配送预约",
+                           "unit": "item", "price": 150},
     }, ensure_ascii=False),
     # 配送规则:轻小件 150 日元起,按尺寸分档;XL(大型家具/冰箱/洗衣机等)单独报价
     "delivery_rules": json.dumps({
@@ -156,6 +151,30 @@ DEFAULT_SETTINGS = {
         "xl_note_zh": "大型商品单独报价,不适用统一低价。",
     }, ensure_ascii=False),
 }
+
+# 最终三项增值服务(权威定价来源)。目录页与创建接口只认这三项 kind,
+# 即使 settings 里存着旧种类/旧价格也一律按此过滤与计价,不被旧数据带偏。
+# kind 取值: cleaning_home(家居清洁,按小时)、transport_small(小件搬运,按趟,
+# 10kg 以内)、local_delivery(本地配送预约,按趟,150 起)。
+FINAL_SERVICE_PRICES = {
+    "cleaning_home": {"name_ja": "ハウスクリーニング", "name_zh": "家居清洁",
+                      "unit": "hour", "price": 1500},
+    "transport_small": {"name_ja": "小口運搬", "name_zh": "小件搬运",
+                        "unit": "item", "price": 500},
+    "local_delivery": {"name_ja": "地域配送予約", "name_zh": "本地配送预约",
+                       "unit": "item", "price": 150},
+}
+
+
+def effective_service_prices(stored_json=None):
+    """Return only the final trio at final prices, ignoring stored values.
+
+    stored_json is accepted for call-site compatibility but deliberately
+    unused: old databases may hold removed kinds or the old 2000/2500
+    prices, and neither may leak into display or billing.
+    """
+    return {k: dict(v) for k, v in FINAL_SERVICE_PRICES.items()}
+
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS users(
@@ -291,6 +310,14 @@ CREATE TABLE IF NOT EXISTS price_suggestions(
   id INTEGER PRIMARY KEY AUTOINCREMENT, listing_id INTEGER NOT NULL,
   suggested_price INTEGER NOT NULL, reason TEXT DEFAULT '',
   status TEXT DEFAULT 'pending', decided_by INTEGER, created_at TEXT);
+CREATE TABLE IF NOT EXISTS ai_jobs(
+  id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL,
+  kind TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'queued',
+  payload_json TEXT DEFAULT '{}', result_json TEXT DEFAULT '{}',
+  created_at TEXT, updated_at TEXT);
+CREATE TABLE IF NOT EXISTS comp_cache(
+  id INTEGER PRIMARY KEY AUTOINCREMENT, model_key TEXT NOT NULL,
+  source TEXT NOT NULL, comps_json TEXT DEFAULT '[]', fetched_at TEXT);
 """
 
 

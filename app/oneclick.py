@@ -13,6 +13,7 @@ import re
 
 from .business import (CONDITION_TEXT, guess_category, local_ai_assist,
                        price_reference)
+from .valuation import valuation_interval as _valuation_interval  # noqa: F401  (stage-3 entry, re-exported)
 
 HIGH_VALUE_CATEGORIES = ("watch", "coin", "antique")
 HIGH_VALUE_THRESHOLD = 100000
@@ -120,6 +121,117 @@ def recognize(conn, name, text, condition, price_hint):
             "condition_guess": cond_guess, "condition_basis": cond_basis,
             "suggestions": suggestions, "is_guess": True,
             "guess_note_ja": GUESS_NOTE_JA, "guess_note_zh": GUESS_NOTE_ZH}
+
+
+# ---- 第 2 阶段:鉴定两轴(成色等级 + 真伪)的品类映射 ----
+# 敏感品类(有假货市场,照片直接给成色 + 真伪 verdict,细节照片只是建议):
+#   watch 手表、coin 钱币/收藏品、antique 古董/艺术、
+#   fashion 品牌包袋配饰(含服装/箱包及配饰)、figure 模型/手办/玩具/绝版收藏。
+# 普通品类(无假货市场,只给成色,不做任何真伪判断):
+#   furniture 家具家居、appliance 家电、digital 手机/电脑/数码、
+#   camera 相机镜头、instrument 乐器音响、book 书籍影音、
+#   tool 工具/运动户外、other 其他合法中古商品。
+# 13 个 db.py 分类 slug 全覆盖,无遗漏、无重叠。
+SENSITIVE_CATEGORIES = ("watch", "coin", "antique", "fashion", "figure")
+ORDINARY_CATEGORIES = ("furniture", "appliance", "digital", "camera",
+                        "instrument", "book", "tool", "other")
+
+# 细节拍摄清单(建议,不是硬性前置条件)。数据结构: slug -> list[str],
+# 供页面展示与第 3 阶段复用;清单缺失的品类返回空列表。
+DETAIL_CHECKLISTS = {
+    "watch": ["表盘", "表背机芯", "刻字", "序列号", "表扣", "表带", "盒证"],
+    "coin": ["正面", "背面", "边缘", "铭文/年份", "评级封装", "证书"],
+    "antique": ["整体", "落款/款识", "底部/胎釉", "细节纹饰", "来源凭证"],
+    "fashion": ["品牌标识/Logo", "五金刻字", "序列号/内标", "走线/材质细节",
+                "盒证/购物凭证"],
+    "figure": ["盒装正面", "本体正面", "本体背面", "版权标识/编号", "配件齐全情况"],
+}
+
+# 细节不足的判定(启发式,本地无视觉模型,不得假装"看"出了内容):
+# 敏感品类照片少于 3 张即视为细节不足 -> 低置信度 + 注明,不硬说无法确认。
+DETAIL_SUFFICIENT_PHOTO_COUNT = 3
+
+
+def is_sensitive_category(category_slug):
+    return category_slug in SENSITIVE_CATEGORIES
+
+
+def detail_checklist_for(category_slug):
+    """返回该品类的细节拍摄建议清单(敏感品类才有,普通品类为空列表)。"""
+    return list(DETAIL_CHECKLISTS.get(category_slug or "", []))
+
+
+def appraise_two_axis(category_slug, price, condition_grade, attrs=None,
+                      photo_count=1, red_flags=None):
+    """第 2 阶段鉴定两轴。本地启发式 + 用户确认,结论一律标注推测性质。
+
+    敏感品类返回成色 + 真伪 verdict(直接给结论,细节照片只是建议):
+      {"condition_grade", "authenticity": {"verdict", "verdict_zh",
+       "confidence", "is_guess", "note"}, "confidence",
+       "detail_insufficient", "detail_note", "detail_checklist",
+       "requires_manual_review", "is_determination": False, ...}
+      verdict 取值 likely_genuine / suspect(仅 red_flags 明确时) /
+      unconfirmed(细节不足时仍给结论倾向,但置信度 low)。
+      细节不足 -> confidence="low" + detail_note 含"细节不足、低置信度",
+      不硬说无法确认;明确红旗/高风险/高价值 -> requires_manual_review。
+      真伪结论一律标注"AI 推测,须人工复核确认"。
+    普通品类返回只有成色的 dict,绝不含 authenticity/verdict/
+    authenticity_risk 等任何真伪字段,也不触发真伪复核。
+    本地无视觉模型、无 OCR:结论依据只是照片数量与用户输入的
+    属性/红旗,绝不声称逐张"看"出了真伪内容。
+    """
+    attrs = attrs or {}
+    red_flags = list(red_flags or [])
+    if attrs.get("red_flag"):
+        red_flags.append(str(attrs.get("red_flag")))
+    grade = condition_grade or "good"
+    if is_sensitive_category(category_slug):
+        try:
+            count = int(photo_count or 0)
+        except (TypeError, ValueError):
+            count = 0
+        insufficient = count < DETAIL_SUFFICIENT_PHOTO_COUNT
+        if red_flags:
+            verdict, verdict_zh = "suspect", "存疑(有明确红旗)"
+        elif insufficient:
+            verdict, verdict_zh = "likely_genuine", "倾向正品(细节不足,低置信度)"
+        else:
+            verdict, verdict_zh = "likely_genuine", "倾向正品"
+        confidence = "low" if (insufficient or red_flags) else "medium"
+        requires_review = bool(red_flags) or is_high_value(category_slug, price)
+        detail_note = ("细节不足、低置信度:细节照片不足,结论置信度低,"
+                       "建议补拍细节照片以提高准确度;不是无法确认。"
+                       if insufficient else "")
+        return {
+            "condition_grade": grade,
+            "authenticity": {
+                "verdict": verdict, "verdict_zh": verdict_zh,
+                "confidence": confidence, "is_guess": True,
+                "note": "AI 推测,须人工复核确认,不是确定结论。",
+            },
+            "confidence": confidence,
+            "detail_insufficient": insufficient,
+            "detail_note": detail_note,
+            "detail_checklist": detail_checklist_for(category_slug),
+            "photo_count": count,
+            "red_flags": red_flags,
+            "requires_manual_review": requires_review,
+            "is_determination": False,
+            "note_zh": "鉴定为本地启发式推测(照片数量与用户输入,无视觉模型),"
+                       "真伪结论是 AI 推测,须人工复核确认。",
+            "note_ja": "鑑定はローカルヒューリスティックによる推測であり、"
+                       "真贋の結論は AI の推測で、人の確認が必要です。",
+        }
+    return {
+        "condition_grade": grade,
+        "confidence": "medium",
+        "is_guess": True,
+        "photo_count": photo_count,
+        "requires_manual_review": False,
+        "is_determination": False,
+        "note_zh": "普通品类只做成色评估,不做真伪判断。",
+        "note_ja": "通常カテゴリは状態評価のみで、真贋判定は行いません。",
+    }
 
 
 def appraise(category_slug, price, condition_grade, attrs):

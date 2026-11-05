@@ -9,29 +9,128 @@ import uuid
 from pathlib import Path
 
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
-from fastapi.responses import HTMLResponse, RedirectResponse, FileResponse
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import (HTMLResponse, JSONResponse, RedirectResponse,
+                               FileResponse)
 
 from . import db as d
+from .aijobs import create_job, get_job, start_job
 from .auctions import compute_price, min_next_bid, place_bid, settle_auction
 from .agents import (anomaly_agent, dispute_agent, inventory_agent,
                      ops_agent, review_agent, support_agent)
 from .business import (BUYBACK_TRANSITIONS, ORDER_TRANSITIONS,
                        can_transition, commission_for, commission_rate,
                        delivery_fee, local_ai_assist, size_class_for, stats)
-from .market import (category_stats, collectible_trend, profit_report,
-                     top_listings, weekly_curve)
-from .oneclick import (appraise, build_draft, is_high_value, recognize,
+from .market import (category_stats, collectible_trend,
+                     listing_price_moves, profit_report, top_listings,
+                     weekly_curve)
+from .market_search import cached_market_comps
+from .oneclick import (appraise, appraise_two_axis, build_draft,
+                       detail_checklist_for, is_high_value, recognize,
                        valuation_for)
+from .valuation import DISCLAIMER_ZH, valuation_interval
 from .payments import get_provider
 from .i18n import lang_from, t
-from .security import (can_admin, can_appraise, can_operate, hash_password,
-                       new_session_token, now_tokyo, session_expiry,
-                       verify_password)
+from .security import (LOGIN_LIMIT, LOGIN_WINDOW, REGISTER_LIMIT,
+                       REGISTER_WINDOW, ROLE_LIMIT, ROLE_WINDOW,
+                       audit_log, can_admin, can_appraise, can_operate,
+                       check_rate_limit, client_ip, hash_password,
+                       new_session_token, now_tokyo, origin_allowed,
+                       reset_rate_limits, session_expiry, text_ok,
+                       valid_email, verify_password)
 
 app = FastAPI(title="Yuno Life")
 d.init_db()
 
+
+@app.middleware("http")
+async def _origin_guard(request, call_next):
+    # 低风险纵深防御(非完整 token 式 CSRF,见报告遗留缺口):
+    # 状态变更 POST 若带 Origin 头且与本站 host 不一致则拒绝;
+    # 无 Origin 头的请求一律放行,现有测试与非浏览器调用不受影响。
+    if request.method in ("POST", "PUT", "PATCH", "DELETE") \
+            and not origin_allowed(request):
+        return JSONResponse({"detail": "origin_mismatch"}, status_code=403)
+    return await call_next(request)
+
+
+def _bad(msg="bad input"):
+    raise HTTPException(400, msg)
+
+
+def _check_price(v):
+    if v is None or v < 1:
+        _bad("bad price")
+
+
+def _check_text(v, max_len, required=False):
+    if not text_ok(v, max_len, required=required):
+        _bad("bad text")
+
+
+_CONDITIONS = ("excellent", "good", "fair", "poor")
+_SIZE_CLASSES = ("S", "M", "L", "XL")
+
 ALLOWED_IMG = {".jpg", ".jpeg", ".png", ".webp", ".gif"}
+# 第 2 阶段:每件商品/每个一键草稿最多 10 张照片,第一张(最小 sort)为封面。
+MAX_PHOTOS = 10
+
+
+async def _read_uploads(files):
+    """校验并读出上传文件,返回 [(filename, bytes)]。超限/坏图直接 400。"""
+    out = []
+    for f in files or []:
+        if f is None or not getattr(f, "filename", ""):
+            continue
+        data = await f.read()
+        ext = Path(f.filename).suffix.lower()
+        if ext not in ALLOWED_IMG or len(data) > 5 * 1024 * 1024:
+            raise HTTPException(400, "bad image")
+        out.append((f"{uuid.uuid4().hex}{ext}", data))
+    return out
+
+
+def _save_upload_blobs(blobs):
+    for fname, data in blobs:
+        (d.UPLOAD_DIR / fname).write_bytes(data)
+
+
+def _renumber_photos(c, listing_id):
+    rows = c.execute("SELECT id FROM images WHERE listing_id=? ORDER BY sort, id",
+                     (listing_id,)).fetchall()
+    for i, r in enumerate(rows):
+        c.execute("UPDATE images SET sort=? WHERE id=?", (i, r["id"]))
+
+
+def _listing_or_403(c, lid, user):
+    row = c.execute("SELECT * FROM listings WHERE id=?", (lid,)).fetchone()
+    if not row:
+        raise HTTPException(404, "not found")
+    if row["seller_id"] != user["id"]:
+        raise HTTPException(403, "not your listing")
+    return row
+
+
+def _draft_photos(draft):
+    """一键草稿照片列表: draft_json["photos"],原 photo 字段作封面兼容。"""
+    try:
+        dr = json.loads(draft["draft_json"] or "{}")
+    except ValueError:
+        dr = {}
+    photos = [p for p in (dr.get("photos") or []) if p]
+    if not photos and draft["photo"]:
+        photos = [draft["photo"]]
+    return photos, dr
+
+
+def _set_draft_photos(c, did, photos, draft):
+    _, dr = _draft_photos(draft)
+    dr["photos"] = list(photos)
+    dr["photo_count"] = len(photos)
+    cover = photos[0] if photos else ""
+    c.execute("UPDATE oneclick_drafts SET photo=?, draft_json=?, updated_at=? "
+              "WHERE id=?", (cover, json.dumps(dr, ensure_ascii=False),
+                             now_tokyo(), did))
 
 
 # ---------------- helpers ----------------
@@ -71,26 +170,36 @@ def require_user(request):
 
 
 def page(request, lang, user, title, body, msg=""):
-    nav_user = ""
+    # Stage 1: no top <nav>. Former top entries live in the bottom bar,
+    # /trade, /me, the footer, or (admin only) the staff entry below.
     if user:
-        nav_user = (f'<a href="/me">{esc(user["display_name"])}</a> '
-                    f'<a href="/me/messages">{t(lang,"messages")}</a> '
-                    f'<a href="/admin">{t(lang,"admin")}</a> ' if can_operate(user) else
-                    f'<a href="/me">{esc(user["display_name"])}</a> '
-                    f'<a href="/me/messages">{t(lang,"messages")}</a> ')
-        nav_user += ('<form method="post" action="/logout" style="display:inline">'
-                     '<button>' + t(lang, "logout") + '</button></form>')
+        user_links = (f'<a href="/me">{esc(user["display_name"])}</a> '
+                      f'<a href="/me/messages">{t(lang, "messages")}</a> ')
+        if can_operate(user):
+            user_links += f'<a href="/admin">{t(lang, "admin")}</a> '
+        user_links += ('<form method="post" action="/logout" style="display:inline">'
+                       '<button>' + t(lang, "logout") + '</button></form>')
     else:
-        nav_user = (f'<a href="/login">{t(lang,"login")}</a> '
-                    f'<a href="/register">{t(lang,"register")}</a>')
+        user_links = (f'<a href="/login">{t(lang, "login")}</a> '
+                      f'<a href="/register">{t(lang, "register")}</a>')
     flash = f'<p class="flash">{esc(msg)}</p>' if msg else ""
-    lang_links = ' | '.join(
-        f'<a href="?lang={l}">{l}</a>' for l in ("ja", "zh", "en"))
+    # Language selector: exactly three options. zh/ja are manual choices
+    # (persisted in cookie); system clears the manual choice so the next
+    # render follows Accept-Language again.
+    lang_links = (f'<a href="?lang=zh">{t(lang, "lang_zh")}</a> | '
+                  f'<a href="?lang=ja">{t(lang, "lang_ja")}</a> | '
+                  f'<a href="?lang=system">{t(lang, "lang_system")}</a>')
+    bottom = (f'<div class="bottom-nav">'
+              f'<a href="/">{t(lang, "marketplace")}</a>'
+              f'<a href="/market">{t(lang, "market")}</a>'
+              f'<a href="/trade">{t(lang, "trade")}</a>'
+              f'<a href="/me#orders">{t(lang, "orders")}</a>'
+              f'<a href="/me">{t(lang, "my_page")}</a></div>')
     html_doc = f"""<!DOCTYPE html><html lang="{lang}"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>{esc(title)} - Yuno Life</title>
 <style>body{{font-family:system-ui,sans-serif;max-width:960px;margin:0 auto;
-padding:12px}}nav a,nav button{{margin-right:10px}}.card{{border:1px solid #ccc;
+padding:12px 12px 70px}}.card{{border:1px solid #ccc;
 border-radius:8px;padding:12px;margin:10px 0}}input,select,textarea{{width:100%;
 padding:8px;margin:4px 0;box-sizing:border-box}}button{{padding:8px 14px;
 cursor:pointer}}.flash{{background:#ffeeba;padding:10px}}table{{width:100%;
@@ -98,20 +207,34 @@ border-collapse:collapse}}td,th{{border:1px solid #ddd;padding:6px;text-align:le
 .badge{{background:#222;color:#fff;padding:2px 8px;border-radius:10px;font-size:12px}}
 .warn{{background:#fff3cd;padding:10px;border:1px solid #e6c200}}
 .grid{{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px}}
+.bottom-nav{{position:fixed;bottom:0;left:0;right:0;background:#fff;
+border-top:1px solid #ccc;display:flex;justify-content:space-around;
+padding:12px 0;z-index:10}}
+.bottom-nav a{{text-decoration:none}}
+img{{max-width:100%;height:auto}}table{{display:block;overflow-x:auto}}
+td,th{{word-break:break-word}}p,li,div,h1,h2,h3{{overflow-wrap:break-word;
+word-break:break-word}}a{{overflow-wrap:anywhere}}
 </style></head><body>
-<nav><a href="/"><b>Yuno Life</b></a> <a href="/">{t(lang,"home")}</a>
-<a href="/listings/new">{t(lang,"publish")}</a>
-<a href="/oneclick">{t(lang,"oneclick")}</a>
-<a href="/auctions">拍卖</a> <a href="/market">行情</a>
-<a href="/services">服务</a> <a href="/support">客服</a> {nav_user}
-<span style="float:right">{lang_links}</span></nav>
-<p>{t(lang,"tagline")}</p>{flash}{body}
+<p><b>Yuno Life</b> · {t(lang, "tagline")}</p>{flash}{body}
 <hr><p><small>Yuno Life MVP · 坂戸市先行 · 支払いは模擬表示 / 支付均为模拟标注 ·
-<a href="/healthz">health</a></small></p></body></html>"""
+{t(lang, "tax_inclusive")} {t(lang, "mock_payment_note")}<br>
+<a href="/services">{t(lang, "services")}</a> ·
+<a href="/support">{t(lang, "support")}</a> ·
+<a href="/rules">{t(lang, "rules")}</a> ·
+<a href="/terms">{t(lang, "terms")}</a> ·
+<a href="/privacy">{t(lang, "privacy")}</a> ·
+<a href="/returns">{t(lang, "returns")}</a> ·
+<a href="/prohibited">{t(lang, "prohibited")}</a> ·
+<a href="/healthz">health</a><br>
+{user_links}<br>
+{t(lang, "language")}: {lang_links}</small></p>
+{bottom}</body></html>"""
     resp = HTMLResponse(html_doc)
     q = request.query_params.get("lang")
     if q in ("ja", "zh", "en"):
-        resp.set_cookie("yuno_lang", q, max_age=365 * 86400)
+        resp.set_cookie("yuno_lang", q, max_age=365 * 86400, samesite="lax")
+    elif q == "system":
+        resp.delete_cookie("yuno_lang")
     return resp
 
 
@@ -119,6 +242,60 @@ def redirect(url, msg=""):
     sep = "&" if "?" in url else "?"
     r = RedirectResponse(f"{url}{sep}msg={msg}" if msg else url, status_code=303)
     return r
+
+
+async def _friendly_http_error(request, exc):
+    if request.url.path.startswith("/ai-jobs") or request.url.path == "/healthz":
+        return JSONResponse({"detail": exc.detail}, status_code=exc.status_code)
+    try:
+        lang = lang_from(request)
+    except Exception:
+        lang = "ja"
+    try:
+        user = current_user(request)
+    except Exception:
+        user = None
+    titles = {401: "需要登录", 403: "无权访问", 404: "页面不存在"}
+    title = titles.get(exc.status_code, "出错了")
+    body = (f"<h2>{title} ({exc.status_code})</h2>"
+            f"<p>{esc(exc.detail)}</p>"
+            f"<p><a href='/'>返回首页</a> · <a href='/me'>个人中心</a> · "
+            f"<a href='/support'>客服</a></p>")
+    try:
+        resp = page(request, lang, user, title, body)
+        resp.status_code = exc.status_code
+        return resp
+    except Exception:
+        return HTMLResponse(f"<h2>{title}</h2><p><a href='/'>返回首页</a></p>",
+                            status_code=exc.status_code)
+
+
+from starlette.exceptions import HTTPException as _StarletteHTTPException
+app.add_exception_handler(HTTPException, _friendly_http_error)
+app.add_exception_handler(_StarletteHTTPException, _friendly_http_error)
+
+
+@app.exception_handler(RequestValidationError)
+async def _friendly_validation_error(request, exc):
+    # 畸形输入统一返回 400(而非框架默认 422),并给友好页面/JSON。
+    if request.url.path.startswith("/ai-jobs"):
+        return JSONResponse({"detail": "bad input"}, status_code=400)
+    try:
+        lang = lang_from(request)
+    except Exception:
+        lang = "ja"
+    try:
+        user = current_user(request)
+    except Exception:
+        user = None
+    body = ("<h2>输入有误 (400)</h2><p>请检查输入内容后重试。</p>"
+            "<p><a href='/'>返回首页</a></p>")
+    try:
+        resp = page(request, lang, user, "输入有误", body)
+        resp.status_code = 400
+        return resp
+    except Exception:
+        return HTMLResponse("<h2>输入有误</h2>", status_code=400)
 
 
 def listing_title(row, lang):
@@ -247,6 +424,12 @@ def register_form(request: Request):
 @app.post("/register")
 def register(request: Request, email: str = Form(...), display_name: str = Form(...),
              password: str = Form(...), phone: str = Form("")):
+    if not check_rate_limit(f"register:{client_ip(request)}:{email}",
+                            REGISTER_LIMIT, REGISTER_WINDOW):
+        raise HTTPException(429, "too many requests")
+    if not valid_email(email) or not text_ok(display_name, 50, required=True) \
+            or len(password) < 8 or not text_ok(phone, 50):
+        raise HTTPException(400, "bad registration input")
     c = conn()
     try:
         if c.execute("SELECT id FROM users WHERE email=?", (email,)).fetchone():
@@ -261,7 +444,7 @@ def register(request: Request, email: str = Form(...), display_name: str = Form(
                   (tok, cur.lastrowid, session_expiry()))
         c.commit()
         r = redirect("/me", "registered")
-        r.set_cookie("yuno_session", tok, httponly=True, max_age=30 * 86400)
+        r.set_cookie("yuno_session", tok, httponly=True, samesite="lax", max_age=30 * 86400)
         return r
     finally:
         c.close()
@@ -280,17 +463,25 @@ def login_form(request: Request):
 
 @app.post("/login")
 def login(request: Request, email: str = Form(...), password: str = Form(...)):
+    _login_key = f"login:{client_ip(request)}:{email}"
+    # 失败桶已满时直接 429(成功登录不计数,避免正常重复登录被误伤)。
+    import app.security as _sec
+    _stamps = _sec._RATE.get(_login_key, [])
+    import time as _time
+    if len([t for t in _stamps if _time.monotonic() - t < LOGIN_WINDOW]) >= LOGIN_LIMIT:
+        raise HTTPException(429, "too many requests")
     c = conn()
     try:
         u = c.execute("SELECT * FROM users WHERE email=?", (email,)).fetchone()
         if not u or not verify_password(password, u["salt"], u["pw_hash"]):
+            check_rate_limit(_login_key, LOGIN_LIMIT, LOGIN_WINDOW)
             return redirect("/login", "invalid_login")
         tok = new_session_token()
         c.execute("INSERT INTO sessions(token,user_id,expires_at) VALUES(?,?,?)",
                   (tok, u["id"], session_expiry()))
         c.commit()
         r = redirect("/me", "logged_in")
-        r.set_cookie("yuno_session", tok, httponly=True, max_age=30 * 86400)
+        r.set_cookie("yuno_session", tok, httponly=True, samesite="lax", max_age=30 * 86400)
         return r
     finally:
         c.close()
@@ -359,7 +550,27 @@ def listing_new(request: Request):
 <option value="M" selected>M</option><option value="L">L</option>
 <option value="XL">XL(大型家具/冰箱/洗衣机等,单独报价)</option></select></label>
 <label>重量(kg)<input name="weight_kg" type="number" step="0.1" value="0"></label>
-<label>商品图片<input type="file" name="image" accept="image/*"></label>
+<label>商品图片(相机优先,最多10张,第一张为封面)<input type="file" name="images" accept="image/*" capture="environment" multiple id="photo-camera"></label>
+<label>从相册选择(并列提供)<input type="file" name="images" accept="image/*" multiple id="photo-album"></label>
+<div id="photo-preview"></div>
+<p><button type="button" id="oneclick-valuation-btn" disabled>AI一键估价</button> 请先拍照/上传照片,AI一键估价才会启用(无照片时估价入口置灰)。</p>
+<script>
+function previewPhotos(input){{var box=document.getElementById('photo-preview');
+box.innerHTML='';var files=input.files||[];if(files.length>10){{alert('最多10张照片');return;}}
+for(var i=0;i<files.length;i++){{var img=document.createElement('img');
+img.style.maxWidth='120px';img.style.maxHeight='120px';
+img.src=URL.createObjectURL(files[i]);box.appendChild(img);}}
+if(files.length>0){{var b=document.getElementById('oneclick-valuation-btn');
+if(b){{b.disabled=false;b.textContent='AI一键估价(照片已就绪)';}}}}}}
+document.getElementById('photo-camera').addEventListener('change',function(){{previewPhotos(this);}});
+document.getElementById('photo-album').addEventListener('change',function(){{previewPhotos(this);}});
+</script>
+<p><small>细节拍摄建议(敏感品类):手表:表盘/表背机芯/刻字/序列号/表扣/表带/盒证;
+钱币:正面/背面/边缘/铭文/年份/评级封装/证书;
+古董:整体/落款/款识/底部/胎釉/细节纹饰/来源凭证;
+品牌包袋配饰:品牌标识/Logo/五金刻字/序列号/内标/走线/材质细节/盒证/购物凭证;
+模型手办:盒装正面/本体正面/本体背面/版权标识/编号/配件齐全情况。
+细节照片只是建议,不是硬性前置条件。</small></p>
 <div id="attrs"></div>
 <button>{t(lang,"submit")}</button></form>
 <h3>AI 辅助(本地启发式,免费)</h3>
@@ -382,23 +593,33 @@ def listing_new(request: Request):
 @app.post("/ai-assist")
 def ai_assist(request: Request, name: str = Form(...), text: str = Form(""),
               condition: str = Form("good"), price_hint: str = Form("")):
+    _check_text(name, 200, required=True)
+    _check_text(text, 5000)
+    if condition not in _CONDITIONS:
+        _bad("bad condition")
     lang = lang_from(request)
     user = require_user(request)
     c = conn()
     try:
         r = local_ai_assist(c, name, text, condition,
                             int(price_hint) if price_hint.isdigit() else None)
+        # 第 3 阶段收口:/ai-assist 的参考价一律明确标注为"平台订单参考",
+        # 绝不说成市场价/市场成交价;price_reference 只统计平台订单与
+        # 挂牌,旧函数保留作兼容,但用户-facing 文案不再用市场价口径。
         if r["price_low"] is None:
-            note = ("暂无样本:平台暂无同类真实成交与在售挂牌可供参考,无法给出参考价。"
-                    "请自行定价。/ サンプル不足のため参考価格を提示できません。")
+            note = ("平台订单参考:暂无样本,平台暂无同类真实成交与在售挂牌可供参考,"
+                    "无法给出参考价,不是市场价。请自行定价。"
+                    " / プラットフォーム注文参考:サンプル不足のため参考価格を提示できません。")
         elif r["price_basis"].startswith("based_on_completed"):
             n = r["price_basis"].split(":")[1]
-            note = (f"基于平台真实成交 {n} 件的中位数 ±20%(可信度:{r['price_confidence']})。"
-                    f"这是参考区间,不是收购承诺。")
+            note = (f"平台订单参考(不是市场价):基于平台真实成交 {n} 件的中位数 ±20%"
+                    f"(可信度:{r['price_confidence']})。"
+                    f"这是平台订单参考区间,不是市场价、不是收购承诺。")
         else:
             n = r["price_basis"].split(":")[1]
-            note = (f"基于在售挂牌价 {n} 件(挂牌价,不是成交价,可信度低)。"
-                    f"这是参考区间,不是收购承诺。")
+            note = (f"平台订单参考(不是市场价):基于平台在售挂牌价 {n} 件"
+                    f"(挂牌价,不是成交价,更不是市场价,可信度低)。"
+                    f"这是平台订单参考区间,不是市场价、不是收购承诺。")
         url = (f"/listings/new?ai_title_ja={r['title_ja']}&ai_title_zh={r['title_zh']}"
                f"&ai_desc_ja={r['desc_ja']}&ai_desc_zh={r['desc_zh']}"
                f"&ai_category={r['category_slug'] or ''}"
@@ -423,8 +644,24 @@ async def listing_create(request: Request, category_slug: str = Form(...),
                          price: int = Form(...), condition_grade: str = Form("good"),
                          region: str = Form("sakado"), size_class: str = Form("M"),
                          weight_kg: float = Form(0),
-                         image: UploadFile = File(None)):
+                         image: UploadFile = File(None),
+                         images: list[UploadFile] = File(None)):
     user = require_user(request)
+    _check_price(price)
+    if weight_kg < 0 or weight_kg > 10000:
+        _bad("bad weight")
+    _check_text(title_ja, 200, required=True)
+    _check_text(title_zh, 200)
+    _check_text(desc_ja, 5000)
+    _check_text(desc_zh, 5000)
+    if condition_grade not in _CONDITIONS or size_class not in _SIZE_CLASSES:
+        _bad("bad condition/size")
+    # 多图:新字段 images + 旧单图字段 image 兼容,第 11 张起拒绝。
+    _all = [image] if (image is not None and getattr(image, "filename", "")) else []
+    _all += [f for f in (images or []) if getattr(f, "filename", "")]
+    if len(_all) > MAX_PHOTOS:
+        raise HTTPException(400, f"最多{MAX_PHOTOS}张照片,已提交{len(_all)}张")
+    blobs = await _read_uploads(_all)
     c = conn()
     try:
         cat = d.category_by_slug(c, category_slug)
@@ -452,17 +689,109 @@ async def listing_create(request: Request, category_slug: str = Form(...),
         if category_slug in ("watch", "coin", "antique") and price >= 100000:
             c.execute("INSERT OR IGNORE INTO hv_reviews(listing_id,created_at)"
                       " VALUES(?,?)", (lid, now_tokyo()))
-        if image is not None and getattr(image, "filename", ""):
-            data = await image.read()
-            ext = Path(image.filename).suffix.lower()
-            if ext not in ALLOWED_IMG or len(data) > 5 * 1024 * 1024:
-                raise HTTPException(400, "bad image")
-            fname = f"{uuid.uuid4().hex}{ext}"
-            (d.UPLOAD_DIR / fname).write_bytes(data)
-            c.execute("INSERT INTO images(listing_id,filename,sort) VALUES(?,?,0)",
-                      (lid, fname))
+        _save_upload_blobs(blobs)
+        for i, (fname, _data) in enumerate(blobs):
+            c.execute("INSERT INTO images(listing_id,filename,sort) VALUES(?,?,?)",
+                      (lid, fname, i))
         c.commit()
         return redirect(f"/listings/{lid}", "published")
+    finally:
+        c.close()
+
+
+# ---------------- 商品照片管理(仅所有者,他人 403) ----------------
+@app.post("/listings/{lid}/photos/add")
+async def listing_photo_add(request: Request, lid: int,
+                            photo: UploadFile = File(None),
+                            photos: list[UploadFile] = File(None)):
+    user = require_user(request)
+    _all = [photo] if (photo is not None and getattr(photo, "filename", "")) else []
+    _all += [f for f in (photos or []) if getattr(f, "filename", "")]
+    blobs = await _read_uploads(_all)
+    c = conn()
+    try:
+        _listing_or_403(c, lid, user)
+        cur_n = c.execute("SELECT COUNT(*) FROM images WHERE listing_id=?",
+                          (lid,)).fetchone()[0]
+        if cur_n + len(blobs) > MAX_PHOTOS:
+            raise HTTPException(400, f"最多{MAX_PHOTOS}张照片,现有{cur_n}张,"
+                                     f"新增{len(blobs)}张会超限")
+        _save_upload_blobs(blobs)
+        for i, (fname, _data) in enumerate(blobs):
+            c.execute("INSERT INTO images(listing_id,filename,sort) VALUES(?,?,?)",
+                      (lid, fname, cur_n + i))
+        c.commit()
+        return redirect(f"/listings/{lid}", "photo_added")
+    finally:
+        c.close()
+
+
+@app.post("/listings/{lid}/photos/{pid}/cover")
+def listing_photo_cover(request: Request, lid: int, pid: int):
+    user = require_user(request)
+    c = conn()
+    try:
+        _listing_or_403(c, lid, user)
+        row = c.execute("SELECT * FROM images WHERE id=? AND listing_id=?",
+                        (pid, lid)).fetchone()
+        if not row:
+            raise HTTPException(404, "photo not found")
+        rows = c.execute("SELECT id FROM images WHERE listing_id=? ORDER BY sort, id",
+                         (lid,)).fetchall()
+        ordered = [pid] + [r["id"] for r in rows if r["id"] != pid]
+        for i, img_id in enumerate(ordered):
+            c.execute("UPDATE images SET sort=? WHERE id=?", (i, img_id))
+        c.commit()
+        return redirect(f"/listings/{lid}", "cover_changed")
+    finally:
+        c.close()
+
+
+@app.post("/listings/{lid}/photos/{pid}/delete")
+def listing_photo_delete(request: Request, lid: int, pid: int):
+    user = require_user(request)
+    c = conn()
+    try:
+        _listing_or_403(c, lid, user)
+        row = c.execute("SELECT * FROM images WHERE id=? AND listing_id=?",
+                        (pid, lid)).fetchone()
+        if not row:
+            raise HTTPException(404, "photo not found")
+        c.execute("DELETE FROM images WHERE id=?", (pid,))
+        _renumber_photos(c, lid)
+        c.commit()
+        p = d.UPLOAD_DIR / Path(row["filename"]).name
+        if p.exists():
+            p.unlink()
+        return redirect(f"/listings/{lid}", "photo_deleted")
+    finally:
+        c.close()
+
+
+@app.post("/listings/{lid}/photos/{pid}/replace")
+async def listing_photo_replace(request: Request, lid: int, pid: int,
+                                photo: UploadFile = File(None),
+                                photos: list[UploadFile] = File(None)):
+    user = require_user(request)
+    _all = [photo] if (photo is not None and getattr(photo, "filename", "")) else []
+    _all += [f for f in (photos or []) if getattr(f, "filename", "")]
+    blobs = await _read_uploads(_all)
+    if len(blobs) != 1:
+        raise HTTPException(400, "replace requires exactly one photo")
+    c = conn()
+    try:
+        _listing_or_403(c, lid, user)
+        row = c.execute("SELECT * FROM images WHERE id=? AND listing_id=?",
+                        (pid, lid)).fetchone()
+        if not row:
+            raise HTTPException(404, "photo not found")
+        _save_upload_blobs(blobs)
+        c.execute("UPDATE images SET filename=? WHERE id=?", (blobs[0][0], pid))
+        c.commit()
+        old = d.UPLOAD_DIR / Path(row["filename"]).name
+        if old.exists():
+            old.unlink()
+        return redirect(f"/listings/{lid}", "photo_replaced")
     finally:
         c.close()
 
@@ -502,30 +831,91 @@ def _guess_panel(rec, lang):
 def _appraisal_panel(ap, lang):
     if not ap:
         return ""
-    factors = ", ".join(ap.get("risk_factors", [])) or "无"
     note = ap.get("note_zh") if lang != "ja" else ap.get("note_ja")
     warn = ""
     if ap.get("requires_manual_review"):
-        warn = ("<br><b>高价值商品:已自动进入人工复核队列,"
+        warn = ("<br><b>高价值/高风险商品:已自动进入人工复核队列,"
                 "鉴定通过前不可交易。</b>")
-    return (f'<div class="card"><b>AI 鉴定(启发式风险提示,不是真伪判定)</b><br>'
+    # 第 2 阶段两轴:敏感品类含 authenticity,普通品类绝不出现真伪字段。
+    if "authenticity" in ap:
+        auth = ap["authenticity"]
+        checklist = "、".join(ap.get("detail_checklist", []))
+        detail = (f'<br>细节不足、低置信度: {esc(ap.get("detail_note", ""))}'
+                  if ap.get("detail_insufficient") else "")
+        return (f'<div class="card"><b>AI 鉴定(成色 + 真伪,全部是 AI 推测)</b><br>'
+                f'成色等级: {esc(ap.get("condition_grade", ""))}<br>'
+                f'真伪结论: {esc(auth.get("verdict_zh", ""))} '
+                f'(置信度 {esc(auth.get("confidence", ""))}, '
+                f'照片 {esc(ap.get("photo_count", ""))} 张)<br>'
+                f'{esc(auth.get("note", ""))}{detail}<br>'
+                f'细节拍摄建议: {esc(checklist)}<br>{esc(note)}{warn}</div>')
+    if "authenticity_risk" in ap:
+        # 旧格式草稿兼容(新识别不再产生此格式)。
+        factors = ", ".join(ap.get("risk_factors", [])) or "无"
+        return (f'<div class="card"><b>AI 鉴定(启发式风险提示,不是真伪判定)</b><br>'
+                f'成色等级: {esc(ap.get("condition_grade", ""))}<br>'
+                f'真伪风险: {esc(ap.get("authenticity_risk", ""))} '
+                f'(风险因素: {esc(factors)})<br>{esc(note)}{warn}</div>')
+    return (f'<div class="card"><b>AI 鉴定(成色评估)</b><br>'
             f'成色等级: {esc(ap.get("condition_grade", ""))}<br>'
-            f'真伪风险: {esc(ap.get("authenticity_risk", ""))} '
-            f'(风险因素: {esc(factors)})<br>{esc(note)}{warn}</div>')
+            f'{esc(note)}{warn}</div>')
+
+
+def _market_comps_html(val):
+    """第 3 阶段:估价面板展示每条市场样本(来源、价格、日期、链接)
+    与各源状态;日期/链接缺失时明说未知/不给链接,绝不编造。"""
+    parts = []
+    comps = val.get("market_comps") or []
+    if comps:
+        items = "".join(
+            f"<li>{esc(c.get('source', ''))} · {yen(c.get('price'))} · "
+            f"日期 {esc(c.get('date') or '未知')}"
+            + (f' · <a href="{esc(c["url"])}">来源链接</a>' if c.get("url")
+               else "") + "</li>" for c in comps)
+        parts.append(f"<br>市场样本:<ul>{items}</ul>")
+    statuses = val.get("source_statuses") or {}
+    if statuses:
+        st = "、".join(f"{esc(k)}:{esc(v)}" for k, v in statuses.items())
+        parts.append(f"<br>各源状态: {st}")
+    if val.get("from_cache"):
+        parts.append("<br>样本来自 24 小时缓存,未重新联网搜索。")
+    if val.get("search_note"):
+        parts.append(f"<br>{esc(val['search_note'])}")
+    return "".join(parts)
 
 
 def _valuation_panel(val, lang):
     if not val:
         return ""
-    if not val.get("has_sample"):
-        basis = val.get("basis_zh") if lang != "ja" else val.get("basis_ja")
-        return (f'<div class="warn"><b>AI 估价:</b> {esc(basis)}'
-                f'不会编造价格,请自行定价。</div>')
     basis = val.get("basis_zh") if lang != "ja" else val.get("basis_ja")
-    return (f'<div class="card"><b>AI 估价参考区间:</b> '
-            f'{yen(val.get("low"))} 〜 {yen(val.get("high"))} '
-            f'(可信度 {esc(val.get("confidence", ""))}, {esc(basis)});'
-            f'这只是参考,不是收购承诺。</div>')
+    # 免责必须逐字展示中文原文(任何语言下都不替换为译文,以免字句走样)。
+    disclaimer = f'<br><small>{DISCLAIMER_ZH}</small>'
+    if val.get("kind") == "market":
+        return (f'<div class="card"><b>AI 估价参考区间:</b> '
+                f'{yen(val.get("low"))} 〜 {yen(val.get("high"))} '
+                f'(样本量 {esc(val.get("sample_count", ""))} 件, '
+                f'可信度 {esc(val.get("confidence", ""))}, {esc(basis)});'
+                f'AI 参考价,不是成交价、不是平台收购承诺。'
+                f'{_market_comps_html(val)}{disclaimer}</div>')
+    if val.get("kind") == "estimate_reference":
+        return (f'<div class="card"><b>AI 估价(推算参考,不是市场价):</b> '
+                f'{yen(val.get("estimate_low"))} 〜 {yen(val.get("estimate_high"))} '
+                f'(可信度 {esc(val.get("confidence", ""))}, {esc(basis)});'
+                f'推算参考未自动填入草稿,仅供参考,不是成交价、'
+                f'不是平台收购承诺。{disclaimer}</div>')
+    if val.get("kind") == "model_unconfirmed":
+        return (f'<div class="warn"><b>AI 估价:</b> 型号未确认: {esc(basis)}'
+                f'请补细节照片(表背、刻字、序列号)或手动输入型号。'
+                f'缺少可靠成交样本 / サンプル不足,不会编造价格,请自行定价。</div>')
+    if val.get("has_sample"):
+        # 旧格式兼容:平台参考区间(新识别不再产生)。
+        return (f'<div class="card"><b>AI 估价参考区间:</b> '
+                f'{yen(val.get("low"))} 〜 {yen(val.get("high"))} '
+                f'(可信度 {esc(val.get("confidence", ""))}, {esc(basis)});'
+                f'这只是参考,不是收购承诺。{disclaimer}</div>')
+    return (f'<div class="warn"><b>AI 估价:</b> {esc(basis)}'
+            f'{_market_comps_html(val)}'
+            f'不会编造价格,请自行定价。</div>')
 
 
 @app.get("/oneclick")
@@ -534,10 +924,19 @@ def oneclick_start(request: Request):
     user = require_user(request)
     body = f"""{_steps_html(1)}
 <h2>{t(lang, "oneclick")}</h2>
-<p>第 1 步:拍一张照片、写上商品名,点主按钮上传。照片本地存储,
-不调用任何付费视觉模型。</p>
+<p>第 1 步:拍照片、写上商品名,点主按钮上传。照片本地存储,
+不调用任何付费视觉模型。最多10张照片,第一张为封面;
+识别与估价分析使用全部照片(本地无视觉模型,结论注明照片数量,
+不假装逐张看出了内容)。</p>
 <form method="post" action="/oneclick/upload" enctype="multipart/form-data">
-<label>商品照片<input type="file" name="photo" accept="image/*"></label>
+<label>商品照片(相机优先)<input type="file" name="photo" accept="image/*" capture="environment"></label>
+<label>从相册选择(并列提供,多张)<input type="file" name="photos" accept="image/*" multiple></label>
+<div id="photo-preview"></div>
+<script>function pv(inp){{var b=document.getElementById('photo-preview');b.innerHTML='';
+for(var i=0;i<inp.files.length;i++){{var im=document.createElement('img');
+im.style.maxWidth='120px';im.src=URL.createObjectURL(inp.files[i]);b.appendChild(im);}}}}
+document.querySelectorAll('input[type=file]').forEach(function(el){{el.addEventListener('change',function(){{pv(this);}});}});
+</script>
 <label>商品名<input name="name" required
 placeholder="如:ロレックス 腕時計 / 微波炉"></label>
 <label>补充描述<textarea name="text"
@@ -558,26 +957,129 @@ placeholder="品牌、年份、状态、附件等,写得越多识别建议越准
 async def oneclick_upload(request: Request, name: str = Form(...),
                           text: str = Form(""), condition: str = Form("good"),
                           price_hint: str = Form(""),
-                          photo: UploadFile = File(None)):
+                          photo: UploadFile = File(None),
+                          photos: list[UploadFile] = File(None)):
     user = require_user(request)
+    _all = [photo] if (photo is not None and getattr(photo, "filename", "")) else []
+    _all += [f for f in (photos or []) if getattr(f, "filename", "")]
+    if len(_all) > MAX_PHOTOS:
+        raise HTTPException(400, f"最多{MAX_PHOTOS}张照片,已提交{len(_all)}张")
+    blobs = await _read_uploads(_all)
+    _save_upload_blobs(blobs)
+    fnames = [fname for fname, _data in blobs]
     c = conn()
     try:
-        fname = ""
-        if photo is not None and getattr(photo, "filename", ""):
-            data = await photo.read()
-            ext = Path(photo.filename).suffix.lower()
-            if ext not in ALLOWED_IMG or len(data) > 5 * 1024 * 1024:
-                raise HTTPException(400, "bad image")
-            fname = f"{uuid.uuid4().hex}{ext}"
-            (d.UPLOAD_DIR / fname).write_bytes(data)
         cur = c.execute(
             "INSERT INTO oneclick_drafts(user_id,photo,name,text,condition_grade,"
-            "price_hint,status,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?)",
-            (user["id"], fname, name, text, condition,
+            "price_hint,draft_json,status,created_at,updated_at) "
+            "VALUES(?,?,?,?,?,?,?,?,?,?)",
+            (user["id"], fnames[0] if fnames else "", name, text, condition,
              int(price_hint) if price_hint.isdigit() else None,
+             json.dumps({"photos": fnames, "photo_count": len(fnames)},
+                        ensure_ascii=False),
              "uploaded", now_tokyo(), now_tokyo()))
         c.commit()
         return redirect(f"/oneclick/{cur.lastrowid}")
+    finally:
+        c.close()
+
+
+@app.post("/oneclick/{did}/photos/add")
+async def oneclick_photo_add(request: Request, did: int,
+                             photo: UploadFile = File(None),
+                             photos: list[UploadFile] = File(None)):
+    user = require_user(request)
+    _all = [photo] if (photo is not None and getattr(photo, "filename", "")) else []
+    _all += [f for f in (photos or []) if getattr(f, "filename", "")]
+    blobs = await _read_uploads(_all)
+    c = conn()
+    try:
+        draft = _draft_or_403(c, did, user)
+        if draft["status"] == "published":
+            return redirect(f"/listings/{draft['listing_id']}")
+        cur_photos, _dr = _draft_photos(draft)
+        if len(cur_photos) + len(blobs) > MAX_PHOTOS:
+            raise HTTPException(400, f"最多{MAX_PHOTOS}张照片")
+        _save_upload_blobs(blobs)
+        _set_draft_photos(c, did, cur_photos + [f for f, _d in blobs], draft)
+        c.commit()
+        return redirect(f"/oneclick/{did}", "photo_added")
+    finally:
+        c.close()
+
+
+@app.post("/oneclick/{did}/photos/{idx}/delete")
+def oneclick_photo_delete(request: Request, did: int, idx: int):
+    user = require_user(request)
+    c = conn()
+    try:
+        draft = _draft_or_403(c, did, user)
+        if draft["status"] == "published":
+            return redirect(f"/listings/{draft['listing_id']}")
+        cur_photos, _dr = _draft_photos(draft)
+        if idx < 0 or idx >= len(cur_photos):
+            raise HTTPException(404, "photo not found")
+        removed = cur_photos.pop(idx)
+        _set_draft_photos(c, did, cur_photos, draft)
+        c.commit()
+        p = d.UPLOAD_DIR / Path(removed).name
+        if p.exists():
+            p.unlink()
+        return redirect(f"/oneclick/{did}", "photo_deleted")
+    finally:
+        c.close()
+
+
+@app.post("/oneclick/{did}/model")
+def oneclick_model_confirm(request: Request, did: int,
+                           brand: str = Form(""), model: str = Form("")):
+    _check_text(brand, 200)
+    _check_text(model, 200)
+    """型号确认流:品牌 + 精确型号可编辑、手动输入/修正。
+    提交非空型号即视为用户确认(model_confirmed=True);清空型号则
+    退回未确认。确认后重新计算估价(仍无同型号市场样本时如实无报价)。"""
+    user = require_user(request)
+    c = conn()
+    try:
+        draft = _draft_or_403(c, did, user)
+        if draft["status"] == "published":
+            return redirect(f"/listings/{draft['listing_id']}")
+        _photos, dr = _draft_photos(draft)
+        dr["brand"] = brand.strip()
+        dr["model"] = model.strip()
+        dr["model_confirmed"] = bool(model.strip())
+        if "attrs" not in dr or not isinstance(dr["attrs"], dict):
+            dr["attrs"] = {}
+        if brand.strip():
+            dr["attrs"]["brand"] = brand.strip()
+        if model.strip():
+            dr["attrs"]["model"] = model.strip()
+        # 第 3 阶段:型号已确认时先查 24 小时缓存中的同型号市场样本
+        # (只读缓存,本路由不联网,避免确认请求被搜索拖慢或被反爬
+        # 误导旧测试;实时搜索走 POST /ai-jobs 的 oneclick_valuation
+        # 任务,样本同样喂给 valuation_interval 并自动填入草稿)。
+        if dr["model_confirmed"]:
+            _comps, _statuses = cached_market_comps(
+                c, brand.strip(), model.strip(), dr.get("category_slug") or "")
+            val = valuation_interval(_comps, draft["condition_grade"],
+                                     model_confirmed=True)
+            if _comps:
+                val["market_comps"] = _comps
+                val["source_statuses"] = _statuses
+                val["from_cache"] = True
+                val["search_note"] = "来自 24 小时缓存的同型号市场样本。"
+                dr["suggested_price"] = val.get("suggested_price")
+                dr["price_source"] = val.get("kind")
+        else:
+            val = valuation_interval([], draft["condition_grade"],
+                                     model_confirmed=False)
+        c.execute("UPDATE oneclick_drafts SET draft_json=?, valuation_json=?,"
+                  "updated_at=? WHERE id=?",
+                  (json.dumps(dr, ensure_ascii=False),
+                   json.dumps(val, ensure_ascii=False), now_tokyo(), did))
+        c.commit()
+        return redirect(f"/oneclick/{did}", "model_confirmed"
+                        if dr["model_confirmed"] else "model_unconfirmed")
     finally:
         c.close()
 
@@ -591,15 +1093,32 @@ def oneclick_detail(request: Request, did: int):
         draft = _draft_or_403(c, did, user)
         if draft["status"] == "published" and draft["listing_id"]:
             return redirect(f"/listings/{draft['listing_id']}")
-        img = (f'<img src="/uploads/{esc(draft["photo"])}" style="max-width:100%">'
-               if draft["photo"] else "<p>未上传照片(纯文字流程也可继续)。</p>")
+        photos, _dr0 = _draft_photos(draft)
+        if photos:
+            img = "".join(
+                f'<div><img src="/uploads/{esc(p)}" style="max-width:100%">'
+                f'<p>{"封面" if i == 0 else f"照片 {i + 1}"} '
+                f'<form method="post" action="/oneclick/{did}/photos/{i}/delete" '
+                f'style="display:inline"><button>删除</button></form></p></div>'
+                for i, p in enumerate(photos))
+            img += (f'<form method="post" action="/oneclick/{did}/photos/add" '
+                    f'enctype="multipart/form-data">'
+                    f'<label>继续添加照片(相机优先,最多10张)'
+                    f'<input type="file" name="photos" accept="image/*" '
+                    f'capture="environment" multiple></label>'
+                    f'<label>从相册选择<input type="file" name="photos" '
+                    f'accept="image/*" multiple></label><button>添加照片</button></form>')
+        else:
+            img = "<p>未上传照片(纯文字流程也可继续)。</p>"
         if draft["status"] == "uploaded":
             body = f"""{_steps_html(2)}{img}
-<p>商品名: {esc(draft["name"])}<br>补充: {esc(draft["text"])}</p>
+<p>商品名: {esc(draft["name"])}<br>补充: {esc(draft["text"])}<br>
+照片数量: {len(photos)} 张(识别与估价分析使用全部照片)。</p>
 <form method="post" action="/oneclick/{did}/recognize">
 <button style="font-size:18px;padding:12px 24px">第 2 步:一键识别</button></form>
 <p><small>识别只用你输入的文字、品类属性模式与本地历史数据,
-不调用视觉模型;结果全部是推测,下一步可改。</small></p>"""
+不调用视觉模型;结果全部是推测,下一步可改。本地无视觉模型、无 OCR,
+识别与鉴定是本地启发式 + 用户确认/手动修正。</small></p>"""
             return page(request, lang, user, t(lang, "oneclick"), body,
                         request.query_params.get("msg", ""))
         rec = json.loads(draft["recognition_json"] or "{}")
@@ -623,14 +1142,51 @@ def oneclick_detail(request: Request, did: int):
             for v, label in [("excellent", "美品 / 近乎全新"), ("good", "良好"),
                              ("fair", "使用感あり / 有使用痕迹"),
                              ("poor", "要修理 / 需维修")])
-        price_val = draft["price_hint"] or ""
+        # 价格自动填入:仅市场区间(中位数)自动填入可编辑草稿;
+        # 推算参考绝不自动填入,无市场价时保留用户期望价。
+        if val.get("is_market_price") and val.get("suggested_price"):
+            price_val = val["suggested_price"]
+            price_note = "AI参考价中位数已自动填入,可修改。"
+        elif val.get("kind") == "estimate_reference":
+            price_val = draft["price_hint"] or ""
+            price_note = (f'推算参考 {yen(val.get("estimate_low"))} 〜 '
+                          f'{yen(val.get("estimate_high"))}(仅供参考,未自动填入)。')
+        else:
+            price_val = draft["price_hint"] or ""
+            price_note = ""
+        checklist = detail_checklist_for(dr.get("category_slug") or "")
+        checklist_html = (f'<p>细节拍摄建议: {esc("、".join(checklist))}</p>'
+                          if checklist else "")
+        model_form = f"""<h3>型号确认(品牌 + 精确型号可编辑,可手动输入/修正)</h3>
+<form method="post" action="/oneclick/{did}/model">
+<label>品牌<input name="brand" value="{esc(dr.get("brand") or dr.get("attrs", {}).get("brand", ""))}"></label>
+<label>精确型号<input name="model" value="{esc(dr.get("model") or dr.get("attrs", {}).get("model", ""))}"></label>
+<button>确认型号</button></form>
+<p>型号确认状态: {"已确认" if dr.get("model_confirmed") else "未确认"}。
+型号未确认时如实无市场报价,绝不编型号、绝不编价格。</p>"""
+        # 第 3 阶段:型号已确认后,可用后台任务跑同型号市场搜索
+        # (60 秒硬上限,先查缓存);任务完成后草稿估价自动更新为市场区间。
+        market_task_form = ""
+        if dr.get("model_confirmed") and dr.get("model"):
+            market_task_form = f"""<h3>市场比价搜索(后台任务)</h3>
+<form method="post" action="/ai-jobs">
+<input type="hidden" name="kind" value="oneclick_valuation">
+<input type="hidden" name="draft_id" value="{did}">
+<button>跑市场搜索(后台任务,60 秒内返回尽力结果)</button></form>
+<p><small>提交后返回任务 id,用 GET /ai-jobs/&#123;id&#125; 轮询结果;
+任务完成后本草稿的估价会更新为同型号市场区间(中位数自动填入
+可编辑价格框),各源状态(超时/不可达/无结果)如实标注,绝不编造样本。
+未确认型号时不跑搜索。</small></p>"""
         body = f"""{_steps_html(3)}{img}
+<p>照片数量: {len(photos)} 张,识别与估价分析已计入全部照片。</p>
 {_guess_panel(rec, lang)}
 {_appraisal_panel(ap, lang)}
 {_valuation_panel(val, lang)}
+{checklist_html}{model_form}{market_task_form}
 <p>草稿规格: {esc(dr.get("spec_zh") or dr.get("spec_ja", ""))}<br>
 关键词: {esc(", ".join(dr.get("keywords", [])))}<br>
-成色描述: {esc(dr.get("condition_desc_zh") or dr.get("condition_desc_ja", ""))}</p>
+成色描述: {esc(dr.get("condition_desc_zh") or dr.get("condition_desc_ja", ""))}<br>
+价格提示: {esc(price_note)}</p>
 <h3>确认并修改草稿,点主按钮即发布</h3>
 <form method="post" action="/oneclick/{did}/publish">
 <label>分类<select name="category_slug">{opts}</select></label>
@@ -665,11 +1221,41 @@ def oneclick_recognize(request: Request, did: int):
             return redirect(f"/listings/{draft['listing_id']}")
         rec = recognize(c, draft["name"], draft["text"],
                         draft["condition_grade"], draft["price_hint"])
-        ap = appraise(rec.get("category_slug"), draft["price_hint"],
-                      rec.get("condition_guess"), rec)
-        val = valuation_for(c, rec.get("category_slug"))
+        photos, old_dr = _draft_photos(draft)
+        # 第 2 阶段:识别与估价分析使用全部照片;鉴定两轴,估价不走平台数据。
+        # 型号在此时尚未由用户确认 -> 估价走型号未确认分支,如实无报价。
+        # 第 3 阶段:若型号此前已确认,同步识别只读缓存中的同型号市场
+        # 样本(不联网);实时搜索走 POST /ai-jobs 的 oneclick_valuation。
+        model_confirmed = bool(old_dr.get("model_confirmed"))
+        rec["photo_count"] = len(photos)
+        rec["photos"] = photos
+        ap = appraise_two_axis(rec.get("category_slug"), draft["price_hint"],
+                               rec.get("condition_guess"), rec,
+                               photo_count=len(photos))
+        if model_confirmed:
+            _comps, _statuses = cached_market_comps(
+                c, old_dr.get("brand", ""), old_dr.get("model", ""),
+                rec.get("category_slug") or "")
+            val = valuation_interval(_comps, rec.get("condition_guess"),
+                                     model_confirmed=True)
+            if _comps:
+                val["market_comps"] = _comps
+                val["source_statuses"] = _statuses
+                val["from_cache"] = True
+                val["search_note"] = "来自 24 小时缓存的同型号市场样本。"
+        else:
+            val = valuation_interval([], rec.get("condition_guess"),
+                                     model_confirmed=False)
         dr = build_draft(c, draft["name"], draft["text"],
                          draft["condition_grade"], draft["price_hint"], rec)
+        dr["photos"] = photos
+        dr["photo_count"] = len(photos)
+        dr["brand"] = rec.get("brand", "")
+        dr["model"] = rec.get("model", "")
+        dr["model_confirmed"] = model_confirmed
+        # 仅市场区间的中位数自动填入;推算参考/无报价时 suggested_price=None。
+        dr["suggested_price"] = val.get("suggested_price")
+        dr["price_source"] = val.get("kind")
         c.execute("UPDATE oneclick_drafts SET recognition_json=?,draft_json=?,"
                   "appraisal_json=?,valuation_json=?,status='recognized',"
                   "updated_at=? WHERE id=?",
@@ -682,7 +1268,9 @@ def oneclick_recognize(request: Request, did: int):
                   "note,created_at) VALUES(?,?,?,?,?,?)",
                   (user["id"], "oneclick_recognize", "oneclick_draft", did,
                    f"category={rec.get('category_slug')};"
-                   f"risk={ap.get('authenticity_risk')}", now_tokyo()))
+                   f"photos={len(photos)};"
+                   f"auth={ap.get('authenticity', {}).get('verdict', 'n/a')}",
+                   now_tokyo()))
         c.commit()
         return redirect(f"/oneclick/{did}")
     finally:
@@ -700,6 +1288,15 @@ async def oneclick_publish(request: Request, did: int,
                            size_class: str = Form("M"),
                            weight_kg: float = Form(0)):
     user = require_user(request)
+    _check_price(price)
+    if weight_kg < 0 or weight_kg > 10000:
+        _bad("bad weight")
+    _check_text(title_ja, 200, required=True)
+    _check_text(title_zh, 200)
+    _check_text(desc_ja, 5000)
+    _check_text(desc_zh, 5000)
+    if condition_grade not in _CONDITIONS or size_class not in _SIZE_CLASSES:
+        _bad("bad condition/size")
     c = conn()
     try:
         draft = _draft_or_403(c, did, user)
@@ -726,6 +1323,12 @@ async def oneclick_publish(request: Request, did: int,
              weight_kg, now_tokyo(), now_tokyo()))
         lid = cur.lastrowid
         hv = is_high_value(category_slug, price)
+        try:
+            ap_stored = json.loads(draft["appraisal_json"] or "{}")
+        except ValueError:
+            ap_stored = {}
+        if ap_stored.get("requires_manual_review"):
+            hv = True
         if hv:
             c.execute("INSERT OR IGNORE INTO hv_reviews(listing_id,created_at)"
                       " VALUES(?,?)", (lid, now_tokyo()))
@@ -733,9 +1336,10 @@ async def oneclick_publish(request: Request, did: int,
                       "target_id,note,created_at) VALUES(?,?,?,?,?,?)",
                       (user["id"], "appraisal_queued", "listing", lid,
                        "high_value_auto_review", now_tokyo()))
-        if draft["photo"]:
-            c.execute("INSERT INTO images(listing_id,filename,sort) VALUES(?,?,0)",
-                      (lid, draft["photo"]))
+        pub_photos, _dr = _draft_photos(draft)
+        for i, fname in enumerate(pub_photos):
+            c.execute("INSERT INTO images(listing_id,filename,sort) VALUES(?,?,?)",
+                      (lid, fname, i))
         c.execute("UPDATE oneclick_drafts SET status='published',listing_id=?,"
                   "updated_at=? WHERE id=?", (lid, now_tokyo(), did))
         c.execute("INSERT INTO audit_log(actor_id,action,target_type,target_id,"
@@ -744,6 +1348,55 @@ async def oneclick_publish(request: Request, did: int,
                    f"from_draft={did}", now_tokyo()))
         c.commit()
         return redirect(f"/listings/{lid}", "published")
+    finally:
+        c.close()
+
+
+# ---------------- 第 3 阶段:AI 任务派发与轮询(ai_jobs) ----------------
+# POST /ai-jobs:登录必需,创建 queued 任务并立即返回任务 id,执行在
+# 后台 daemon 线程完成;GET /ai-jobs/{id}:仅任务所有者或运营可见,
+# 他人 403。状态机 queued -> running -> done/failed,result_json 存结果。
+@app.post("/ai-jobs")
+def ai_job_create(request: Request, kind: str = Form(...),
+                  draft_id: str = Form(""), brand: str = Form(""),
+                  model: str = Form(""), category_slug: str = Form("")):
+    user = require_user(request)
+    payload = {"kind": kind}
+    if draft_id:
+        try:
+            payload["draft_id"] = int(draft_id)
+        except ValueError:
+            raise HTTPException(400, "bad draft_id")
+    if brand:
+        payload["brand"] = brand
+    if model:
+        payload["model"] = model
+    if category_slug:
+        payload["category_slug"] = category_slug
+    c = conn()
+    try:
+        job_id = create_job(c, user["id"], kind, payload)
+    finally:
+        c.close()
+    start_job(job_id)
+    return JSONResponse({"job_id": job_id, "status": "queued",
+                         "poll_url": f"/ai-jobs/{job_id}",
+                         "note": "任务已派发,后台执行中;用 poll_url 轮询结果。"})
+
+
+@app.get("/ai-jobs/{jid}")
+def ai_job_get(request: Request, jid: int):
+    user = require_user(request)
+    c = conn()
+    try:
+        job = get_job(c, jid)
+        if not job:
+            raise HTTPException(404, "not found")
+        if job["user_id"] != user["id"] and not can_operate(user):
+            raise HTTPException(403, "forbidden")
+        return JSONResponse({"job_id": job["id"], "kind": job["kind"],
+                             "status": job["status"],
+                             "result": job["result"]})
     finally:
         c.close()
 
@@ -769,10 +1422,36 @@ def listing_detail(request: Request, lid: int):
         if not r:
             raise HTTPException(404, "not found")
         seller = d.user_by_id(c, r["seller_id"]) if r["seller_id"] else None
-        imgs = c.execute("SELECT filename FROM images WHERE listing_id=? ORDER BY sort",
-                         (lid,)).fetchall()
-        img_html = "".join(f'<img src="/uploads/{i["filename"]}" '
-                           f'style="max-width:100%;max-height:320px">' for i in imgs)
+        imgs = c.execute("SELECT id, filename FROM images WHERE listing_id=? "
+                         "ORDER BY sort, id", (lid,)).fetchall()
+        is_owner = bool(user and r["seller_id"] == user["id"])
+        img_parts = []
+        for i, row in enumerate(imgs):
+            part = (f'<div><img src="/uploads/{row["filename"]}" '
+                    f'style="max-width:100%;max-height:320px">'
+                    f'<p>{"封面" if i == 0 else f"照片 {i + 1}"}</p>')
+            if is_owner:
+                part += (f'<form method="post" action="/listings/{lid}/photos/'
+                         f'{row["id"]}/cover"><button>设为封面</button></form>'
+                         f'<form method="post" action="/listings/{lid}/photos/'
+                         f'{row["id"]}/delete"><button>删除照片</button></form>'
+                         f'<form method="post" action="/listings/{lid}/photos/'
+                         f'{row["id"]}/replace" enctype="multipart/form-data">'
+                         f'<label>替换/重拍<input type="file" name="photo" '
+                         f'accept="image/*" capture="environment"></label>'
+                         f'<button>替换照片</button></form>')
+            part += "</div>"
+            img_parts.append(part)
+        img_html = "".join(img_parts)
+        if is_owner:
+            img_html += (f'<form method="post" action="/listings/{lid}/photos/add" '
+                         f'enctype="multipart/form-data">'
+                         f'<label>继续添加照片(最多10张,相机优先)'
+                         f'<input type="file" name="photos" accept="image/*" '
+                         f'capture="environment" multiple></label>'
+                         f'<label>从相册选择<input type="file" name="photos" '
+                         f'accept="image/*" multiple></label>'
+                         f'<button>添加照片</button></form>')
         attrs_html = ""
         for k, v in json.loads(r["attrs_json"] or "{}").items():
             attrs_html += f"<li>{esc(k)}: {esc(v)}</li>"
@@ -854,7 +1533,7 @@ def listing_detail(request: Request, lid: int):
 · 卖家:{esc(seller["display_name"]) if seller else t(lang,"platform_owned")}</p>
 <p>{esc(listing_desc(r, lang))}</p><ul>{attrs_html}</ul>
 <p>成色:{esc(r["condition_grade"])} · 检测记录:{esc(r["inspection_record"] or "—")}</p>
-{fee_html}{hv_html}{auc_html}{follow_html}{actions}</div>
+{fee_html}{hv_html}{auc_html}{follow_html}<p><small>{t(lang,"tax_inclusive")} {t(lang,"mock_payment_note")}</small></p>{actions}</div>
 <p><a href="/">{t(lang,"back")}</a></p>"""
         return page(request, lang, user, listing_title(r, lang), body,
                     request.query_params.get("msg", ""))
@@ -911,6 +1590,7 @@ def buy(request: Request, lid: int):
 @app.post("/listings/{lid}/offer")
 def offer(request: Request, lid: int, amount: int = Form(...)):
     user = require_user(request)
+    _check_price(amount)
     c = conn()
     try:
         r = c.execute("SELECT * FROM listings WHERE id=?", (lid,)).fetchone()
@@ -937,7 +1617,8 @@ def offer_accept(request: Request, oid: int):
         if not o:
             raise HTTPException(404, "not found")
         listing = c.execute("SELECT * FROM listings WHERE id=?", (o["listing_id"],)).fetchone()
-        if listing["seller_id"] != user["id"] or listing["status"] != "active":
+        if not listing or listing["seller_id"] != user["id"] \
+                or listing["status"] != "active" or o["status"] != "pending":
             raise HTTPException(403, "forbidden")
         c.execute("UPDATE offers SET status='accepted' WHERE id=?", (oid,))
         new_oid, err = create_order(c, o["buyer_id"], listing, o["amount"])
@@ -954,10 +1635,14 @@ def offer_reject(request: Request, oid: int):
     c = conn()
     try:
         o = c.execute("SELECT * FROM offers WHERE id=?", (oid,)).fetchone()
+        if not o:
+            raise HTTPException(404, "not found")
         listing = c.execute("SELECT * FROM listings WHERE id=?", (o["listing_id"],)).fetchone()
-        if not o or listing["seller_id"] != user["id"]:
+        if not listing or listing["seller_id"] != user["id"] \
+                or o["status"] != "pending":
             raise HTTPException(403, "forbidden")
         c.execute("UPDATE offers SET status='rejected' WHERE id=?", (oid,))
+        audit_log(c, user["id"], "offer_reject", "offer", oid, "rejected")
         c.commit()
         return redirect("/me", "offer_rejected")
     finally:
@@ -967,14 +1652,20 @@ def offer_reject(request: Request, oid: int):
 @app.post("/offers/{oid}/counter")
 def offer_counter(request: Request, oid: int, counter_amount: int = Form(...)):
     user = require_user(request)
+    _check_price(counter_amount)
     c = conn()
     try:
         o = c.execute("SELECT * FROM offers WHERE id=?", (oid,)).fetchone()
+        if not o:
+            raise HTTPException(404, "not found")
         listing = c.execute("SELECT * FROM listings WHERE id=?", (o["listing_id"],)).fetchone()
-        if not o or listing["seller_id"] != user["id"]:
+        if not listing or listing["seller_id"] != user["id"] \
+                or o["status"] != "pending":
             raise HTTPException(403, "forbidden")
         c.execute("UPDATE offers SET status='countered',counter_amount=? WHERE id=?",
                   (counter_amount, oid))
+        audit_log(c, user["id"], "offer_counter", "offer", oid,
+                  f"counter={counter_amount}")
         c.commit()
         return redirect("/me", "offer_countered")
     finally:
@@ -987,8 +1678,11 @@ def offer_accept_counter(request: Request, oid: int):
     c = conn()
     try:
         o = c.execute("SELECT * FROM offers WHERE id=?", (oid,)).fetchone()
+        if not o:
+            raise HTTPException(404, "not found")
         listing = c.execute("SELECT * FROM listings WHERE id=?", (o["listing_id"],)).fetchone()
-        if not o or o["buyer_id"] != user["id"] or o["status"] != "countered":
+        if not listing or o["buyer_id"] != user["id"] or o["status"] != "countered" \
+                or listing["status"] != "active":
             raise HTTPException(403, "forbidden")
         c.execute("UPDATE offers SET status='accepted' WHERE id=?", (oid,))
         new_oid, err = create_order(c, user["id"], listing, o["counter_amount"])
@@ -1030,10 +1724,15 @@ def thread(request: Request, lid: int, buyer_id: int):
 def thread_post(request: Request, lid: int, buyer_id: int,
                 body: str = Form(...), receiver_id: int = Form(...)):
     user = require_user(request)
+    _check_text(body, 5000, required=True)
     c = conn()
     try:
         listing = c.execute("SELECT * FROM listings WHERE id=?", (lid,)).fetchone()
         if not listing or (user["id"] != buyer_id and user["id"] != listing["seller_id"]):
+            raise HTTPException(403, "forbidden")
+        # 改参数不得把消息发给无关第三方:收件人必须是对话另一方。
+        expected = listing["seller_id"] if user["id"] == buyer_id else buyer_id
+        if receiver_id != expected:
             raise HTTPException(403, "forbidden")
         c.execute("INSERT INTO messages(listing_id,buyer_id,sender_id,receiver_id,"
                   "body,created_at) VALUES(?,?,?,?,?,?)",
@@ -1118,9 +1817,9 @@ def order_detail(request: Request, oid: int):
 <p>商品金额:{yen(o['goods_amount'])} · {t(lang,"commission")}:{yen(o['commission'])}
 · {t(lang,"delivery_fee")}:{yen(o['delivery_fee'])} · {t(lang,"total")}:{yen(o['total'])}</p>
 <p>状态:{esc(o['status'])} · 支付凭证:{esc(o['payment_ref'] or '—')}</p>
-<p class="warn">{t(lang,"mock_payment_note")}</p>{acts}
+<p class="warn">{t(lang,"tax_inclusive")} {t(lang,"mock_payment_note")}</p>{acts}
 <h3>金额变动审计</h3><ul>{audit_html}</ul></div>"""
-        return page(request, lang, user, "订单", body,
+        return page(request, lang, user, t(lang, "orders"), body,
                     request.query_params.get("msg", ""))
     finally:
         c.close()
@@ -1158,6 +1857,8 @@ def order_pay(request: Request, oid: int, idempotency_key: str = Form(...)):
         c.execute("INSERT INTO order_audit(order_id,event,amount_delta,note,created_at)"
                   " VALUES(?,?,?,?,?)",
                   (oid, "mock_payment", o["total"], "模拟支付,非真实扣款", now_tokyo()))
+        audit_log(c, user["id"], "order_pay_mock", "order", oid,
+                  f"total={o['total']};simulated")
         c.execute("UPDATE listings SET status='sold' WHERE id=?", (o["listing_id"],))
         c.commit()
         return redirect(f"/orders/{oid}", "mock_paid")
@@ -1179,6 +1880,7 @@ def order_complete(request: Request, oid: int):
                   (now_tokyo(), oid))
         c.execute("INSERT INTO order_audit(order_id,event,amount_delta,note,created_at)"
                   " VALUES(?,?,?,?,?)", (oid, "completed", 0, "buyer confirmed", now_tokyo()))
+        audit_log(c, user["id"], "order_complete", "order", oid, "completed")
         if o["is_platform_sale"]:
             c.execute("UPDATE inventory SET status='sold' WHERE listing_id=?",
                       (o["listing_id"],))
@@ -1202,6 +1904,7 @@ def order_cancel(request: Request, oid: int):
                   (now_tokyo(), oid))
         c.execute("INSERT INTO order_audit(order_id,event,amount_delta,note,created_at)"
                   " VALUES(?,?,?,?,?)", (oid, "cancelled", 0, "cancelled", now_tokyo()))
+        audit_log(c, user["id"], "order_cancel", "order", oid, "cancelled")
         c.execute("UPDATE listings SET status='active' WHERE id=?", (o["listing_id"],))
         c.commit()
         return redirect(f"/orders/{oid}", "cancelled")
@@ -1279,10 +1982,21 @@ def buyback_detail(request: Request, bid: int):
             acts += f"""<form method="post" action="/buyback/{bid}/pay">
 <input name="resale_price" type="number" min="1" required placeholder="自营售价 ¥">
 <button>收购付款并入库</button></form>"""
+        # 第 3 阶段收口:买断页的 AI 参考区间依据一律译为平台口径,
+        # 不再原样展示 based_on_* 原始串,更不说成市场价。
+        if (b["ai_basis"] or "").startswith("based_on_completed:"):
+            _bb_basis = (f"平台订单参考(不是市场价):平台真实成交 "
+                         f"{b['ai_basis'].split(':')[1]} 件")
+        elif (b["ai_basis"] or "").startswith("based_on_active_listings:"):
+            _bb_basis = (f"平台订单参考(不是市场价):平台在售挂牌 "
+                         f"{b['ai_basis'].split(':')[1]} 件"
+                         f"(挂牌价,不是成交价,更不是市场价)")
+        else:
+            _bb_basis = "平台订单参考:暂无平台样本"
         ai_html = ""
         if b["ai_low"] is not None:
             ai_html = f"<p>AI 参考区间: {yen(b['ai_low'])} ~ {yen(b['ai_high'])} " \
-                      f"(可信度 {esc(b['ai_confidence'])} · 依据 {esc(b['ai_basis'])})</p>"
+                      f"(可信度 {esc(b['ai_confidence'])} · 依据 {_bb_basis})</p>"
         else:
             ai_html = ("<p class='warn'>暂无样本:平台暂无同类真实成交可供参考,"
                        "AI 未给出参考价。AI 估价不是最终收购承诺。</p>")
@@ -1294,6 +2008,7 @@ def buyback_detail(request: Request, bid: int):
 <p>平台报价:{yen(b['quote'])} · 预约取货:{esc(b['pickup_at'] or '—')}
 · 验货:{esc(b['inspection_note'] or '—')} · 收购成本:{yen(b['acquisition_cost'])}</p>
 <p class="warn">平台有权拒绝收购,不承诺回收所有商品;AI 估价不是最终收购承诺。</p>
+<p><small>{t(lang,"tax_inclusive")}</small></p>
 {acts}</div>"""
         return page(request, lang, user, "买断申请", body,
                     request.query_params.get("msg", ""))
@@ -1317,6 +2032,8 @@ def _buyback_transition(request, bid, target, role_check, extra=None):
                    ",".join(f"{k}=?" for k in extra) + " WHERE id=?")
             args = [target, now_tokyo()] + list(extra.values()) + [bid]
         c.execute(sql, args)
+        audit_log(c, user["id"], "buyback_transition", "buyback", bid,
+                  f"{b['status']}->{target}")
         c.commit()
         return redirect(f"/buyback/{bid}", target)
     finally:
@@ -1337,6 +2054,7 @@ def buyback_reject(request: Request, bid: int):
 
 @app.post("/buyback/{bid}/quote")
 def buyback_quote(request: Request, bid: int, quote: int = Form(...)):
+    _check_price(quote)
     return _buyback_transition(request, bid, "quoted",
                                lambda u, b: can_operate(u), {"quote": quote})
 
@@ -1349,6 +2067,7 @@ def buyback_accept(request: Request, bid: int):
 
 @app.post("/buyback/{bid}/pickup")
 def buyback_pickup(request: Request, bid: int, pickup_at: str = Form(...)):
+    _check_text(pickup_at, 100, required=True)
     return _buyback_transition(request, bid, "pickup_scheduled",
                                lambda u, b: u["id"] == b["seller_id"] or can_operate(u),
                                {"pickup_at": pickup_at})
@@ -1356,6 +2075,7 @@ def buyback_pickup(request: Request, bid: int, pickup_at: str = Form(...)):
 
 @app.post("/buyback/{bid}/inspect")
 def buyback_inspect(request: Request, bid: int, inspection_note: str = Form(...)):
+    _check_text(inspection_note, 2000, required=True)
     return _buyback_transition(request, bid, "inspected",
                                lambda u, b: can_appraise(u),
                                {"inspection_note": inspection_note})
@@ -1365,6 +2085,7 @@ def buyback_inspect(request: Request, bid: int, inspection_note: str = Form(...)
 def buyback_pay(request: Request, bid: int, resale_price: int = Form(...)):
     """收购付款 -> 原商品售出 -> 生成平台自营商品 + 库存记录(成本=报价)。"""
     user = require_user(request)
+    _check_price(resale_price)
     c = conn()
     try:
         b = c.execute("SELECT * FROM buybacks WHERE id=?", (bid,)).fetchone()
@@ -1391,6 +2112,8 @@ def buyback_pay(request: Request, bid: int, resale_price: int = Form(...)):
         c.execute("UPDATE listings SET status='sold' WHERE id=?", (listing["id"],))
         c.execute("UPDATE buybacks SET status='completed',updated_at=? WHERE id=?",
                   (now_tokyo(), bid))
+        audit_log(c, user["id"], "buyback_pay", "buyback", bid,
+                  f"quote={b['quote']};resale={resale_price}")
         c.commit()
         return redirect(f"/listings/{new_lid}", "buyout_completed")
     finally:
@@ -1448,11 +2171,24 @@ def me(request: Request):
         bb = [f'<div class="card"><a href="/buyback/{r["id"]}">买断申请 #{r["id"]}</a> '
               f'商品 #{r["listing_id"]} · {esc(r["status"])} · 报价 {yen(r["quote"])}</div>'
               for r in my_bb]
+        admin_link = (f'<div class="card"><a href="/admin">{t(lang, "admin")}</a></div>'
+                      if can_operate(user) else "")
+        entries = (f'<div class="card"><a href="/trade">{t(lang, "trade")}</a> · '
+                   f'<a href="/listings/new">{t(lang, "publish")}</a> · '
+                   f'<a href="/oneclick">{t(lang, "oneclick")}</a> · '
+                   f'<a href="/auctions">{t(lang, "auction")}</a> · '
+                   f'<a href="/services">{t(lang, "services")}</a> · '
+                   f'<a href="/support">{t(lang, "support")}</a> · '
+                   f'<a href="/me/messages">{t(lang, "messages")}</a> · '
+                   f'<a href="/orders">{t(lang, "orders")}</a> · '
+                   f'<a href="/rules">{t(lang, "rules")}</a></div>{admin_link}')
         body = (f"<h2>{esc(user['display_name'])} ({esc(user['role'])})</h2>"
                 f"<p>{esc(user['email'])} · 地区 {esc(user['region'])}</p>"
-                + rows("我的商品", li) + rows("我的订单", od)
-                + rows("收到的议价", oi) + rows("我发出的议价", oo)
-                + rows("我的买断申请", bb))
+                + entries
+                + rows(t(lang, "my_listings"), li)
+                + f'<div id="orders">' + rows(t(lang, "my_orders"), od) + "</div>"
+                + rows(t(lang, "offers_in"), oi) + rows(t(lang, "offers_out"), oo)
+                + f'<div id="buybacks">' + rows(t(lang, "my_buybacks"), bb) + "</div>")
         return page(request, lang, user, t(lang, "my_page"), body,
                     request.query_params.get("msg", ""))
     finally:
@@ -1463,15 +2199,25 @@ def me(request: Request):
 def admin_page(request, lang, user, title, body, msg=""):
     if not can_operate(user):
         raise HTTPException(403, "forbidden")
-    nav = """<p><a href="/admin">概览</a> <a href="/admin/users">用户</a>
-<a href="/admin/listings">商品</a> <a href="/admin/buybacks">买断</a>
-<a href="/admin/orders">订单</a> <a href="/admin/inventory">自营库存</a>
-<a href="/admin/auctions">拍卖</a> <a href="/admin/deliveries">配送</a>
-<a href="/admin/services">服务</a> <a href="/admin/refunds">退款</a>
-<a href="/admin/disputes">争议</a> <a href="/admin/high-value">高价值审核</a>
-<a href="/admin/alerts">预警</a> <a href="/admin/profit">利润分析</a>
-<a href="/admin/agents">AI 运营</a>
-<a href="/admin/settings">参数设置</a> <a href="/admin/expenses">费用</a></p>"""
+    if "<table" in body and "<td>" not in body:
+        body = body + "<p>暂无</p>"
+    nav = (f"<p><a href=\"/admin\">{t(lang, 'overview')}</a> "
+           f"<a href=\"/admin/users\">{t(lang, 'users')}</a> "
+           f"<a href=\"/admin/listings\">{t(lang, 'listings')}</a> "
+           f"<a href=\"/admin/buybacks\">{t(lang, 'buyback')}</a> "
+           f"<a href=\"/admin/orders\">{t(lang, 'orders')}</a> "
+           f"<a href=\"/admin/inventory\">{t(lang, 'inventory')}</a> "
+           f"<a href=\"/admin/auctions\">{t(lang, 'auction')}</a> "
+           f"<a href=\"/admin/deliveries\">{t(lang, 'deliveries')}</a> "
+           f"<a href=\"/admin/services\">{t(lang, 'services')}</a> "
+           f"<a href=\"/admin/refunds\">{t(lang, 'refunds')}</a> "
+           f"<a href=\"/admin/disputes\">{t(lang, 'disputes')}</a> "
+           f"<a href=\"/admin/high-value\">{t(lang, 'high_value')}</a> "
+           f"<a href=\"/admin/alerts\">{t(lang, 'alerts')}</a> "
+           f"<a href=\"/admin/profit\">{t(lang, 'profit')}</a> "
+           f"<a href=\"/admin/agents\">{t(lang, 'agents')}</a> "
+           f"<a href=\"/admin/settings\">{t(lang, 'settings')}</a> "
+           f"<a href=\"/admin/expenses\">{t(lang, 'expenses')}</a></p>")
     return page(request, lang, user, title, nav + body, msg)
 
 
@@ -1536,11 +2282,22 @@ def admin_user_role(request: Request, uid: int, role: str = Form(...)):
     user = require_user(request)
     if not can_admin(user):
         raise HTTPException(403, "forbidden")
+    if not check_rate_limit(f"role:{user['id']}", ROLE_LIMIT, ROLE_WINDOW):
+        raise HTTPException(429, "too many requests")
     if role not in ("user", "collector", "operator", "appraiser", "courier", "admin"):
         raise HTTPException(400, "bad role")
+    if uid == user["id"]:
+        raise HTTPException(403, "cannot change own role")
     c = conn()
     try:
-        c.execute("UPDATE users SET role=? WHERE id=?", (role, uid)); c.commit()
+        target = c.execute("SELECT role FROM users WHERE id=?", (uid,)).fetchone()
+        if not target:
+            raise HTTPException(404, "not found")
+        old_role = target["role"]
+        c.execute("UPDATE users SET role=? WHERE id=?", (role, uid))
+        audit_log(c, user["id"], "role_change", "user", uid,
+                  f"{old_role}->{role}")
+        c.commit()
         return redirect("/admin/users", "role_updated")
     finally:
         c.close()
@@ -1580,7 +2337,9 @@ def admin_listing_toggle(request: Request, lid: int):
         if not r:
             raise HTTPException(404, "not found")
         new = "active" if r["status"] == "removed" else "removed"
-        c.execute("UPDATE listings SET status=? WHERE id=?", (new, lid)); c.commit()
+        c.execute("UPDATE listings SET status=? WHERE id=?", (new, lid))
+        audit_log(c, user["id"], "listing_toggle", "listing", lid, new)
+        c.commit()
         return redirect("/admin/listings", new)
     finally:
         c.close()
@@ -1693,6 +2452,9 @@ def admin_settings_post(request: Request, commission_rate: str = Form(...),
         d.set_setting(c, "commission_rate", str(rate))
         d.set_setting(c, "regions", regions)
         d.set_setting(c, "buyback_params", buyback_params)
+        audit_log(c, user["id"], "settings_change", "settings", None,
+                  f"commission_rate={rate}")
+        c.commit()
         return redirect("/admin/settings", "saved")
     finally:
         c.close()
@@ -1718,10 +2480,16 @@ def admin_expenses_post(request: Request, kind: str = Form(...),
     user = require_user(request)
     if not can_admin(user):
         raise HTTPException(403, "forbidden")
+    if amount < 0:
+        _bad("bad amount")
+    _check_text(kind, 200, required=True)
+    _check_text(note, 2000)
     c = conn()
     try:
-        c.execute("INSERT INTO expenses(kind,amount,note,created_at) VALUES(?,?,?,?)",
-                  (kind, amount, note, now_tokyo()))
+        cur = c.execute("INSERT INTO expenses(kind,amount,note,created_at) VALUES(?,?,?,?)",
+                        (kind, amount, note, now_tokyo()))
+        audit_log(c, user["id"], "expense_add", "expense", cur.lastrowid,
+                  f"{kind}:{amount}")
         c.commit()
         return redirect("/admin", "expense_added")
     finally:
@@ -1747,8 +2515,9 @@ def auction_list(request: Request):
                       f'{yen(price)} · 出价 {len(bids)} 笔 · 保留价 '
                       f'{yen(a["reserve_price"])} · 结束 {esc(a["ends_at"])} · '
                       f'{esc(a["status"])}</div>')
-        body = f"<h2>拍卖专场(任何商品均可拍卖)</h2>{cards or '<p>暂无拍卖</p>'}"
-        return page(request, lang, current_user(request), "拍卖", body,
+        body = (f"<h2>{t(lang, 'auction')}</h2>"
+              f"{cards or f'<p>{t(lang, 'no_data')}</p>'}")
+        return page(request, lang, current_user(request), t(lang, "auction"), body,
                     request.query_params.get("msg", ""))
     finally:
         c.close()
@@ -1797,9 +2566,10 @@ def auction_detail(request: Request, aid: int):
 {yen(a["min_increment"])} · 一口价 {yen(a["buy_now_price"])} · 开始
 {esc(a["starts_at"])} · 结束 {esc(a["ends_at"])} · 状态 {esc(a["status"])}
 · 保证金 {'需要 ' + yen(a["deposit_amount"]) + '(模拟)' if a["deposit_required"] else '不需要'}</p>
-<p>防压线:结束前 5 分钟内出价自动延时 5 分钟。</p>{forms}
+<p>防压线:结束前 5 分钟内出价自动延时 5 分钟。</p>
+<p><small>{t(lang,"tax_inclusive")} {t(lang,"mock_payment_note")}</small></p>{forms}
 <h3>竞价记录</h3><ul>{bid_html or '<li>暂无出价</li>'}</ul></div>"""
-        return page(request, lang, user, "拍卖", body,
+        return page(request, lang, user, t(lang, "auction"), body,
                     request.query_params.get("msg", ""))
     finally:
         c.close()
@@ -1811,6 +2581,11 @@ def auction_create(request: Request, lid: int, start_price: int = Form(...),
                    buy_now_price: int = Form(0), ends_at: str = Form(...),
                    deposit_required: str = Form(""), deposit_amount: int = Form(0)):
     user = require_user(request)
+    _check_price(start_price)
+    if reserve_price < 0 or min_increment < 1 or buy_now_price < 0 \
+            or deposit_amount < 0:
+        _bad("bad auction params")
+    _check_text(ends_at, 100, required=True)
     c = conn()
     try:
         listing = c.execute("SELECT * FROM listings WHERE id=?", (lid,)).fetchone()
@@ -1841,6 +2616,9 @@ def auction_create(request: Request, lid: int, start_price: int = Form(...),
 def auction_bid(request: Request, aid: int, amount: int = Form(...),
                 proxy_max: int = Form(0)):
     user = require_user(request)
+    _check_price(amount)
+    if proxy_max < 0:
+        _bad("bad proxy")
     c = conn()
     try:
         a = c.execute("SELECT * FROM auctions WHERE id=?", (aid,)).fetchone()
@@ -1868,6 +2646,19 @@ def auction_deposit(request: Request, aid: int):
         a = c.execute("SELECT * FROM auctions WHERE id=?", (aid,)).fetchone()
         if not a:
             raise HTTPException(404, "not found")
+        # 第 3 阶段补齐:卖家不得给自己的拍卖交保证金(自购/自抬价拦截),
+        # 且仅在拍卖进行中、要求保证金时才可交。
+        listing = c.execute("SELECT * FROM listings WHERE id=?",
+                            (a["listing_id"],)).fetchone()
+        if listing and listing["seller_id"] == user["id"]:
+            return redirect(f"/auctions/{aid}", "own_listing")
+        if a["status"] != "active" or not a["deposit_required"]:
+            return redirect(f"/auctions/{aid}", "deposit_not_required")
+        _dup_dep = c.execute("SELECT id FROM deposits WHERE auction_id=? "
+                             "AND bidder_id=? AND status='held'",
+                             (aid, user["id"])).fetchone()
+        if _dup_dep:
+            return redirect(f"/auctions/{aid}", "deposit_already_held")
         c.execute("INSERT INTO deposits(auction_id,bidder_id,amount,status,"
                   "created_at) VALUES(?,?,?,?,?)",
                   (aid, user["id"], a["deposit_amount"], "held", now_tokyo()))
@@ -1893,6 +2684,8 @@ def auction_buy_now(request: Request, aid: int):
         if err:
             return redirect(f"/auctions/{aid}", "needs_separate_quote")
         c.execute("UPDATE auctions SET status='ended_sold' WHERE id=?", (aid,))
+        audit_log(c, user["id"], "auction_buy_now", "auction", aid,
+                  f"order={oid}")
         c.commit()
         return redirect(f"/orders/{oid}", "buy_now_order")
     finally:
@@ -1910,6 +2703,8 @@ def auction_settle(request: Request, aid: int):
         if not a:
             raise HTTPException(404, "not found")
         outcome, oid, price = settle_auction(c, a, create_order)
+        audit_log(c, user["id"], "auction_settle", "auction", aid,
+                  f"{outcome};order={oid};price={price}")
         c.commit()
         if outcome == "sold":
             return redirect(f"/orders/{oid}", "auction_sold")
@@ -1924,6 +2719,8 @@ def follow(request: Request, lid: int):
     user = require_user(request)
     c = conn()
     try:
+        if not c.execute("SELECT id FROM listings WHERE id=?", (lid,)).fetchone():
+            raise HTTPException(404, "not found")
         c.execute("INSERT OR IGNORE INTO listing_follows(user_id,listing_id,"
                   "created_at) VALUES(?,?,?)", (user["id"], lid, now_tokyo()))
         c.commit()
@@ -1976,6 +2773,7 @@ def order_review(request: Request, oid: int, rating: int = Form(...),
     user = require_user(request)
     if rating < 1 or rating > 5:
         raise HTTPException(400, "bad rating")
+    _check_text(comment, 2000)
     c = conn()
     try:
         o = c.execute("SELECT * FROM orders WHERE id=?", (oid,)).fetchone()
@@ -2075,6 +2873,7 @@ def delivery_detail(request: Request, did: int):
 def delivery_request(request: Request, oid: int, kind: str = Form(...),
                      scheduled_at: str = Form("")):
     user = require_user(request)
+    _check_text(scheduled_at, 100)
     if kind not in ("buyer_delivery", "seller_pickup"):
         raise HTTPException(400, "bad kind")
     c = conn()
@@ -2109,6 +2908,8 @@ def _delivery_transition(request, did, target, courier_field=None):
                       "WHERE id=?", (user["id"], did))
         else:
             c.execute("UPDATE deliveries SET status=? WHERE id=?", (target, did))
+        audit_log(c, user["id"], "delivery_transition", "delivery", did,
+                  f"{r['status']}->{target}")
         c.commit()
         return redirect(f"/deliveries/{did}", target)
     finally:
@@ -2141,6 +2942,8 @@ async def _delivery_photo(request, did, target, field):
                 (d.UPLOAD_DIR / fname).write_bytes(data)
         c.execute(f"UPDATE deliveries SET status=?,{field}=? WHERE id=?",
                   (target, fname, did))
+        audit_log(c, user["id"], "delivery_transition", "delivery", did,
+                  f"{r['status']}->{target}")
         c.commit()
         return redirect(f"/deliveries/{did}", target)
     finally:
@@ -2167,6 +2970,7 @@ def delivery_confirm(request: Request, did: int):
         if not r or user["id"] != o["buyer_id"] or r["status"] != "delivered":
             raise HTTPException(403, "forbidden")
         c.execute("UPDATE deliveries SET status='confirmed' WHERE id=?", (did,))
+        audit_log(c, user["id"], "delivery_confirm", "delivery", did, "confirmed")
         c.commit()
         return redirect(f"/deliveries/{did}", "confirmed")
     finally:
@@ -2180,14 +2984,21 @@ def service_catalog(request: Request):
     user = current_user(request)
     c = conn()
     try:
-        prices = json.loads(d.get_setting(c, "service_prices") or "{}")
+        prices = d.effective_service_prices(d.get_setting(c, "service_prices"))
         rows = ""
         for kind, v in prices.items():
             name = v.get(f"name_{lang}") or v.get("name_zh") or kind
-            unit = "小时" if v.get("unit") == "hour" else "件"
+            if v.get("unit") == "hour":
+                unit = "小时" if lang == "zh" else "時間"
+            else:
+                unit = "趟" if lang == "zh" else "回"
+            suffix = ""
+            if kind == "transport_small":
+                suffix = "（10kg 以内）" if lang == "zh" else "（10kg以内）"
+            if kind == "local_delivery":
+                suffix = "起" if lang == "zh" else "〜"
             rows += (f'<div class="card"><b>{esc(name)}</b> · '
-                     f'{yen(v["price"])}/{unit}'
-                     f'{" (代售按成交另计)" if kind == "consignment" else ""}</div>')
+                     f'{yen(v["price"])}/{unit}{suffix}</div>')
         form = ""
         if user:
             opts = "".join(f'<option value="{k}">{esc(v.get("name_zh") or k)}'
@@ -2200,10 +3011,10 @@ def service_catalog(request: Request):
 <input name="listing_id" placeholder="关联商品 ID(可选)">
 <input name="buyback_id" placeholder="关联买断申请 ID(可选,用于同一笔结算抵扣)">
 <input name="note" placeholder="备注"><button>下单</button></form>"""
-        body = (f"<h2>增值服务</h2><p>家居清洁 2,000 日元/小时(可配置,见后台参数)。"
-                f"服务订单独立结算;与买断同笔结算时,应收、应付与抵扣金额分项列示。</p>"
+        body = (f"<h2>{t(lang, 'services')}</h2>"
+                f"<p>{t(lang, 'tax_inclusive')} {t(lang, 'mock_payment_note')}</p>"
                 f"{rows}{form}")
-        return page(request, lang, user, "增值服务", body,
+        return page(request, lang, user, t(lang, "services"), body,
                     request.query_params.get("msg", ""))
     finally:
         c.close()
@@ -2215,9 +3026,12 @@ def service_create(request: Request, kind: str = Form(...),
                    listing_id: str = Form(""), buyback_id: str = Form(""),
                    note: str = Form("")):
     user = require_user(request)
+    if hours <= 0 or hours > 24 or qty < 1 or qty > 100:
+        _bad("bad service qty/hours")
+    _check_text(note, 2000)
     c = conn()
     try:
-        prices = json.loads(d.get_setting(c, "service_prices") or "{}")
+        prices = d.effective_service_prices(d.get_setting(c, "service_prices"))
         if kind not in prices:
             raise HTTPException(400, "bad service kind")
         unit_price = int(prices[kind]["price"])
@@ -2262,11 +3076,13 @@ def service_detail(request: Request, sid: int):
             acts += f'<form method="post" action="/services/{sid}/complete"><button>服务完成</button></form>'
         if s["status"] in ("requested", "confirmed"):
             acts += f'<form method="post" action="/services/{sid}/cancel"><button>取消</button></form>'
-        body = (f"<h2>服务订单 #{sid}</h2><div class='card'><p>类型 {esc(s['kind'])} · "
+        body = (f"<h2>{t(lang, 'service_order')} #{sid}</h2>"
+                f"<p><small>{t(lang, 'tax_inclusive')} {t(lang, 'mock_payment_note')}</small></p>"
+                f"<div class='card'><p>类型 {esc(s['kind'])} · "
                 f"单价 {yen(s['unit_price'])} · 小时 {s['hours']} · 件数 {s['qty']} · "
                 f"应收 {yen(s['amount'])} · 状态 {esc(s['status'])}</p>"
                 f"{offset_note}{acts}</div>")
-        return page(request, lang, user, "服务订单", body,
+        return page(request, lang, user, t(lang, "service_order"), body,
                     request.query_params.get("msg", ""))
     finally:
         c.close()
@@ -2287,6 +3103,8 @@ def _service_transition(request, sid, target, allowed_from, operator_only=True):
         if s["status"] not in allowed_from:
             return redirect(f"/services/{sid}", "invalid_state")
         c.execute("UPDATE service_orders SET status=? WHERE id=?", (target, sid))
+        audit_log(c, user["id"], "service_transition", "service_order", sid,
+                  f"{s['status']}->{target}")
         c.commit()
         return redirect(f"/services/{sid}", target)
     finally:
@@ -2319,6 +3137,8 @@ def service_cancel(request: Request, sid: int):
 def refund_request(request: Request, oid: int, reason: str = Form(...),
                    evidence: str = Form("")):
     user = require_user(request)
+    _check_text(reason, 2000, required=True)
+    _check_text(evidence, 2000)
     c = conn()
     try:
         o = c.execute("SELECT * FROM orders WHERE id=?", (oid,)).fetchone()
@@ -2371,6 +3191,7 @@ def refund_detail(request: Request, rid: int):
 def refund_decide(request: Request, rid: int, decision: str = Form(...),
                   decision_note: str = Form(...)):
     user = require_user(request)
+    _check_text(decision_note, 2000, required=True)
     if not can_operate(user):
         raise HTTPException(403, "forbidden")
     if decision not in ("approved", "rejected"):
@@ -2410,6 +3231,7 @@ def refund_decide(request: Request, rid: int, decision: str = Form(...),
 @app.post("/orders/{oid}/dispute")
 def dispute_create(request: Request, oid: int, reason: str = Form(...)):
     user = require_user(request)
+    _check_text(reason, 2000, required=True)
     c = conn()
     try:
         o = c.execute("SELECT * FROM orders WHERE id=?", (oid,)).fetchone()
@@ -2458,6 +3280,8 @@ def dispute_detail(request: Request, did: int):
 def dispute_decide(request: Request, did: int, decision: str = Form(...),
                    note: str = Form(...)):
     user = require_user(request)
+    _check_text(decision, 200, required=True)
+    _check_text(note, 2000, required=True)
     if not can_operate(user):
         raise HTTPException(403, "forbidden")
     c = conn()
@@ -2511,9 +3335,38 @@ def market_page(request: Request):
             f" · 在售 {x['active_n']} 件"
             f"{' · 挂牌均价 ' + yen(x['active_avg']) if x['active_avg'] else ''}</li>"
             for x in coll)
-        body = f"""<h2>交易行情(全部基于平台真实订单,演示订单已排除)</h2>
+        # 第 3 阶段行情双榜:涨幅与下跌同屏、按单个商品,依据为平台
+        # 真实订单(首次 vs 最近成交价),与估价的市场搜索数据严格区分。
+        moves = listing_price_moves(c)
+        def _move_rows(items, up):
+            rows_html = ""
+            for i, m in enumerate(items):
+                pill_color = "#2e7d32" if up else "#c62828"
+                arrow = "▲" if up else "▼"
+                top = ""
+                if i == 0:
+                    top = " <b>最高涨幅</b>" if up else " <b>最高跌幅</b>"
+                rows_html += (f"<li>{top} #{m['listing_id']} "
+                              f"{esc(m['title_zh'] or m['title_ja'])} "
+                              f"({esc(m['cat_zh'])}) "
+                              f'<span style="background:{pill_color};color:#fff;'
+                              f'padding:2px 8px;border-radius:10px">{arrow} '
+                              f"{m['pct']:+.1f}%</span> "
+                              f"{yen(m['first'])} → {yen(m['latest'])} "
+                              f"(vs 首次成交价,样本量 {m['orders']} 笔真实订单)</li>")
+            return rows_html or "<li>暂无数据</li>"
+        dual = f"""<h3>涨跌双榜(按单个商品,涨幅与下跌同屏)</h3>
+<p>上涨 {moves['up_count']} 件 · 下跌 {moves['down_count']} 件 · 持平 {moves['flat_count']} 件 ·
+数据不足(真实订单不足 2 笔)的商品 {moves['insufficient']} 件未列入涨跌榜,已排除、不编造。</p>
+<p><small>涨跌依据:平台真实订单统计,涨跌 = 最近真实成交价 vs 首次成交价
+(标注“vs 首次成交价”),样本量 = 该商品真实订单数;挂牌价不计入涨跌。
+本榜是平台行情展示,与 AI 估价的市场搜索数据不同,估价绝不走平台订单数据。</small></p>
+<h4>上涨榜 ▲</h4><ol>{_move_rows(moves['gainers'], True)}</ol>
+<h4>下跌榜 ▼</h4><ol>{_move_rows(moves['losers'], False)}</ol>"""
+        body = f"""<h2>{t(lang, "market")}</h2>
 <p class="warn">挂牌价与真实成交价严格区分:下表成交列只统计已支付/已完成订单;
 样本不足时已标注,请勿把挂牌价当作成交价。</p>
+{dual}
 <h3>各类别交易量与成交价格区间</h3><table><tr><th>类别</th><th>挂牌数</th>
 <th>在售数</th><th>成交数</th><th>成交总额</th><th>均价/中位数</th>
 <th>成交区间</th><th>关注数</th><th>平均成交周期(天)</th><th>样本说明</th></tr>
@@ -2522,7 +3375,7 @@ def market_page(request: Request):
 <h3>最近 12 周价格走势(全平台成交均价)</h3><ul>{curve_html}</ul>
 <h3>收藏品价格变化(手表/钱币/古董:成交均价 vs 在售挂牌均价)</h3>
 <ul>{coll_html}</ul>"""
-        return page(request, lang, current_user(request), "行情", body)
+        return page(request, lang, current_user(request), t(lang, "market"), body)
     finally:
         c.close()
 
@@ -2531,22 +3384,148 @@ def market_page(request: Request):
 @app.get("/support")
 def support_form(request: Request):
     lang = lang_from(request)
-    body = """<h2>客服(本地规则问答)</h2><form method="post">
+    body = f"""<h2>{t(lang, "support")}</h2><form method="post">
 <input name="question" required placeholder="例如:运费怎么算?佣金多少?">
 <button>提问</button></form>
 <p><small>规则问答由本地规则库回答,不调用外部模型;复杂问题请转人工客服。</small></p>"""
-    return page(request, lang, current_user(request), "客服", body,
+    return page(request, lang, current_user(request), t(lang, "support"), body,
                 request.query_params.get("msg", ""))
 
 
 @app.post("/support")
 def support_ask(request: Request, question: str = Form(...)):
+    _check_text(question, 2000, required=True)
     lang = lang_from(request)
     ans = support_agent(question)
-    body = (f"<h2>客服回答</h2><div class='card'><p>问题:{esc(question)}</p>"
+    body = (f"<h2>{t(lang, 'support')}</h2><div class='card'><p>问题:{esc(question)}</p>"
             f"<p>{esc(ans['answer'])}</p><p><small>{esc(ans['note'])}</small></p></div>"
             f"<p><a href='/support'>再问一个</a></p>")
-    return page(request, lang, current_user(request), "客服", body)
+    return page(request, lang, current_user(request), t(lang, "support"), body)
+
+
+# ================= 第 1 阶段:交易面板 / 订单列表 / 规则页 =================
+@app.get("/trade")
+def trade_panel(request: Request):
+    """交易面板:集中发布、AI一键、拍卖、买断申请入口(200,无需登录)。"""
+    lang = lang_from(request)
+    user = current_user(request)
+    staff = ""
+    if user and can_operate(user):
+        staff = f'<div class="card"><a href="/admin">{t(lang, "admin")}</a></div>'
+    login_note = "" if user else f'<p>{t(lang, "login_required")}</p>'
+    body = f"""<h2>{t(lang, "trade")}</h2>{login_note}
+<div class="card"><a href="/listings/new">{t(lang, "publish")}</a></div>
+<div class="card"><a href="/oneclick">{t(lang, "oneclick")}</a></div>
+<div class="card"><a href="/auctions">{t(lang, "auction")}</a></div>
+<div class="card"><p>{t(lang, "buyback")}: {t(lang, "sell_to_platform")} — """
+    body += """请在商品详情页点“申请卖给平台”,或在个人中心查看已有申请。</p>
+<a href="/me#buybacks">个人中心 · 买断申请</a></div>
+<div class="card"><a href="/services">增值服务</a> · <a href="/support">客服</a> ·
+<a href="/me/messages">站内消息</a></div>""" + staff
+    # 上面卡片文案保持日中双语可读:标题已随语言切换,说明为通用指引。
+    return page(request, lang, user, t(lang, "trade"), body,
+                request.query_params.get("msg", ""))
+
+
+@app.get("/orders")
+def order_list(request: Request):
+    """订单列表:本人订单(买卖双方);管理员/运营可看全部。"""
+    lang = lang_from(request)
+    user = require_user(request)
+    c = conn()
+    try:
+        if can_operate(user):
+            rows_ = c.execute("SELECT * FROM orders ORDER BY id DESC").fetchall()
+        else:
+            rows_ = c.execute("SELECT * FROM orders WHERE buyer_id=? OR seller_id=? "
+                              "ORDER BY id DESC", (user["id"], user["id"])).fetchall()
+        items = "".join(
+            f'<div class="card"><a href="/orders/{r["id"]}">订单 #{r["id"]}</a> '
+            f'{yen(r["total"])} · {esc(r["status"])}</div>' for r in rows_)
+        empty = f"<p>{t(lang, 'no_data')}</p>"
+        body = (f"<h2>{t(lang, 'orders')}</h2>"
+                f"<p><small>{t(lang, 'mock_payment_note')}</small></p>"
+                f"{items or empty}")
+        return page(request, lang, user, t(lang, "orders"), body,
+                    request.query_params.get("msg", ""))
+    finally:
+        c.close()
+
+
+def _rules_page(request, key, title_ja, title_zh, body_ja, body_zh):
+    lang = lang_from(request)
+    body = (f"<h2>{t(lang, key)}</h2>"
+            f"<p><small>{t('ja', 'tax_inclusive')} {t('ja', 'mock_payment_note')}<br>"
+            f"{t('zh', 'tax_inclusive')} {t('zh', 'mock_payment_note')}</small></p>"
+            f"<h3>日本語</h3><div class='card'>{body_ja}</div>"
+            f"<h3>中文</h3><div class='card'>{body_zh}</div>"
+            f"<p><a href='/rules'>{t(lang, 'rules')}</a></p>")
+    return page(request, lang, current_user(request), t(lang, key), body)
+
+
+@app.get("/rules")
+def rules_index(request: Request):
+    lang = lang_from(request)
+    body = (f"<h2>{t(lang, 'rules')}</h2>"
+            f"<p><small>{t('ja', 'tax_inclusive')} {t('ja', 'mock_payment_note')}<br>"
+            f"{t('zh', 'tax_inclusive')} {t('zh', 'mock_payment_note')}</small></p>"
+            f"<h3>日本語</h3><div class='card'><ul>"
+            f"<li><a href='/terms'>利用規約</a></li>"
+            f"<li><a href='/privacy'>プライバシーポリシー</a></li>"
+            f"<li><a href='/returns'>返品・紛争</a></li>"
+            f"<li><a href='/prohibited'>出品禁止物</a></li></ul></div>"
+            f"<h3>中文</h3><div class='card'><ul>"
+            f"<li><a href='/terms'>条款</a></li>"
+            f"<li><a href='/privacy'>隐私</a></li>"
+            f"<li><a href='/returns'>退货争议</a></li>"
+            f"<li><a href='/prohibited'>禁售规则</a></li></ul></div>")
+    return page(request, lang, current_user(request), t(lang, "rules"), body)
+
+
+@app.get("/terms")
+def terms_page(request: Request):
+    return _rules_page(
+        request, "terms", "利用規約", "条款",
+        "<p>Yuno Life は坂戸市を起点とする中古取引プラットフォームです。"
+        "表示価格はすべて税込です。決済・配送の表示はシミュレーションであり、"
+        "実際の請求は発生しません。出品者は商品説明に責任を持ち、"
+        "虚偽の説明や偽造品の出品は禁止です。</p>",
+        "<p>Yuno Life 是以坂户市为起点的中古交易平台。所有价格均为含税价。"
+        "支付与配送均为模拟表示，不会产生真实扣款。出品者须对商品描述负责，"
+        "虚假描述与假冒商品禁止上架。</p>")
+
+
+@app.get("/privacy")
+def privacy_page(request: Request):
+    return _rules_page(
+        request, "privacy", "プライバシーポリシー", "隐私",
+        "<p>登録情報(メールアドレス・表示名・電話番号)は取引連絡と"
+        "アカウント管理にのみ使います。写真と商品情報はローカルに保存され、"
+        "有料の外部 API には送信されません。</p>",
+        "<p>注册信息(邮箱、昵称、手机号)仅用于交易联系与账号管理。"
+        "照片与商品信息保存在本地，不会发送给任何付费外部 API。</p>")
+
+
+@app.get("/returns")
+def returns_page(request: Request):
+    return _rules_page(
+        request, "returns", "返品・紛争", "退货争议",
+        "<p>返品・返金は注文ページから申請し、運営が判断します。"
+        "紛争も注文ページから提起できます。判断結果は注文ページと"
+        "個人中心で確認できます。決済はシミュレーション表示です。</p>",
+        "<p>退货退款请在订单页申请，由运营判断；交易争议同样在订单页发起。"
+        "处理结果可在订单页与个人中心查看。支付均为模拟表示。</p>")
+
+
+@app.get("/prohibited")
+def prohibited_page(request: Request):
+    return _rules_page(
+        request, "prohibited", "出品禁止物", "禁售规则",
+        "<p>以下は出品禁止です:違法品、盗品、偽造品・模造品、"
+        "危険物、法令で取引が禁止されている物品。その他、"
+        "プラットフォームが不適切と判断した商品は取り下げます。</p>",
+        "<p>以下禁止上架：违法物品、赃物、假冒伪造商品、危险品、"
+        "法律法规禁止交易的物品。平台判断为不适宜的其他商品也会下架。</p>")
 
 
 # ================= 后台:二三阶段 =================
@@ -2816,6 +3795,8 @@ def admin_run_anomalies(request: Request):
             c.execute("INSERT INTO alerts(kind,target_type,target_id,detail,"
                       "severity,created_at) VALUES(?,?,?,?,?,?)",
                       (kind, ttype, tid, detail, sev, now_tokyo()))
+        audit_log(c, user["id"], "agent_anomaly_scan", "alert", None,
+                  f"found={len(found)}")
         c.commit()
         return redirect("/admin/alerts", f"scanned_{len(found)}")
     finally:
@@ -2837,6 +3818,8 @@ def admin_run_pricing(request: Request):
                           "suggested_price,reason,created_at) VALUES(?,?,?,?)",
                           (s["listing_id"], s["suggested_price"], s["reason"],
                            now_tokyo()))
+        audit_log(c, user["id"], "agent_pricing_run", "price_suggestion", None,
+                  "generated")
         c.commit()
         return redirect("/admin/agents", "suggestions_generated")
     finally:
@@ -2874,8 +3857,13 @@ def admin_suggestion_reject(request: Request, sid: int):
         raise HTTPException(403, "forbidden")
     c = conn()
     try:
+        srow = c.execute("SELECT listing_id FROM price_suggestions WHERE id=?",
+                         (sid,)).fetchone()
         c.execute("UPDATE price_suggestions SET status='rejected',decided_by=? "
                   "WHERE id=?", (user["id"], sid))
+        if srow:
+            audit_log(c, user["id"], "price_suggestion_reject", "listing",
+                      srow["listing_id"], f"suggestion={sid}")
         c.commit()
         return redirect("/admin/agents", "suggestion_rejected")
     finally:

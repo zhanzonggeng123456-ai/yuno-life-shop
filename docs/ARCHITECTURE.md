@@ -76,7 +76,7 @@ countered → accepted(按还价生成订单)。
 取货/交付照片文件名。
 - service_orders:用户、关联商品/买断申请、服务类型、小时数/件数、
 单价、应收金额、状态(requested/confirmed/in_progress/completed/cancelled)。
-服务目录与单价存 settings.service_prices(家居清洁 2000 日元/小时,可配置)。
+服务目录与单价以代码常量 FINAL_SERVICE_PRICES 为准(仅三项:家居清洁 1500 日元/小时、小件搬运 500 日元/趟、本地配送预约 150 日元/趟起),settings 旧值不影响展示与计价。
 - refunds:订单、申请人、原因、证据、状态(requested/decided)、
 裁决、裁决人、裁决说明;批准后订单状态变为 refunded 并记账。
 - disputes:订单、举报人、原因、状态(open/decided)、裁决、裁决人、说明。
