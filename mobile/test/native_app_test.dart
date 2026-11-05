@@ -8,6 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:yuno_life/main.dart';
 import 'package:yuno_life/labels.dart';
 import 'package:yuno_life/design.dart';
+import 'package:yuno_life/market_home.dart';
 
 void main() {
   setUp(() async {
@@ -44,11 +45,11 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byType(NavigationDestination), findsNWidgets(5));
     expect(find.byType(AppBar), findsNothing);
-    expect(find.text('暂无记录'), findsOneWidget);
+    expect(find.text('商品行情'), findsOneWidget);
     await tester.tap(find.text('成交行情'));
     await tester.pumpAndSettle();
-    expect(find.text('上涨 ▲'), findsOneWidget);
-    expect(find.text('下跌 ▼'), findsOneWidget);
+    expect(find.text('涨幅榜'), findsOneWidget);
+    expect(find.text('跌幅榜'), findsOneWidget);
     expect(tester.takeException(), isNull);
     await tester.tap(find.text('订单'));
     await tester.pumpAndSettle();
@@ -56,6 +57,59 @@ void main() {
     await tester.tap(find.text('个人中心'));
     await tester.pumpAndSettle();
     expect(find.text('登录 / 注册'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+  testWidgets(
+      'current reference home has overview and working stock/rank switch',
+      (tester) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    session.client = MockClient((r) async => http.Response(
+        jsonEncode(r.url.path.endsWith('/market')
+            ? {
+                'overview': {
+                  'gmv': 12000,
+                  'orders': 2,
+                  'paid_orders': 2,
+                  'active_count': 1,
+                  'active_asking_total': 6000,
+                  'change_pct': null,
+                  'volume_curve': []
+                },
+                'moves': {'gainers': [], 'losers': []},
+                'categories': [],
+              }
+            : {
+                'items': r.url.path.endsWith('/listings')
+                    ? [
+                        {
+                          'id': 1,
+                          'title_zh': '测试在售相机',
+                          'price': 6000,
+                          'photos': []
+                        }
+                      ]
+                    : []
+              }),
+        200,
+        headers: {'content-type': 'application/json'}));
+    await tester
+        .pumpWidget(MaterialApp(theme: yunoTheme(), home: const HomeShell()));
+    await tester.pumpAndSettle();
+    expect(find.byType(MarketHome), findsOneWidget);
+    expect(find.text('¥12,000'), findsOneWidget);
+    expect(find.text('商品行情'), findsOneWidget);
+    await tester.ensureVisible(find.text('现货'));
+    await tester.tap(find.text('现货'));
+    await tester.pumpAndSettle();
+    expect(find.text('测试在售相机'), findsWidgets);
+    await tester.scrollUntilVisible(find.text('看完整行情 →'), -180,
+        scrollable: find.byType(Scrollable).first);
+    await tester.tap(find.text('看完整行情 →'));
+    await tester.pumpAndSettle();
+    expect(find.byType(TrendsPage), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
   testWidgets(
@@ -86,7 +140,7 @@ void main() {
       await tester.pumpWidget(MaterialApp(
           key: ValueKey(language),
           theme: yunoTheme(),
-          home: const HomeShell()));
+          home: const Scaffold(body: MarketPage())));
       await tester.pumpAndSettle();
       await tester.scrollUntilVisible(find.byType(ListingCard).first, 180,
           scrollable: find.byType(Scrollable).first);
@@ -114,10 +168,10 @@ void main() {
       requests.add(request.url);
       return http.Response('{"items":[]}', 200);
     });
-    await tester
-        .pumpWidget(MaterialApp(theme: yunoTheme(), home: const HomeShell()));
+    await tester.pumpWidget(MaterialApp(
+        theme: yunoTheme(), home: const Scaffold(body: MarketPage())));
     await tester.pumpAndSettle();
-    expect(find.byType(BrandHeader), findsOneWidget);
+    expect(find.byType(TextField), findsOneWidget);
     await tester.enterText(find.byType(TextField).first, 'Sony');
     await tester.tap(find.text('搜索'));
     await tester.pumpAndSettle();
@@ -128,19 +182,23 @@ void main() {
     expect(requests.last.queryParameters['q'], 'Sony');
     expect(tester.takeException(), isNull);
   });
-  testWidgets('trade grid changes actual bottom destination', (tester) async {
+  testWidgets('raised trade menu preserves market and routes to services',
+      (tester) async {
     await tester
         .pumpWidget(MaterialApp(theme: yunoTheme(), home: const HomeShell()));
     await tester.pumpAndSettle();
     await tester.tap(find.byType(NavigationDestination).at(2));
     await tester.pumpAndSettle();
-    expect(find.text('拍照发布 · AI 一键估价'), findsOneWidget);
-    await tester.tap(find.text('我要买'));
-    await tester.pumpAndSettle();
+    expect(find.byType(TradeMenu), findsOneWidget);
+    expect(find.text('发布闲置'), findsOneWidget);
+    expect(find.text('发布拍卖'), findsOneWidget);
     expect(
         tester.widget<NavigationBar>(find.byType(NavigationBar)).selectedIndex,
         0);
-    expect(find.text('搜索'), findsOneWidget);
+    await tester.tap(find.text('增值服务'));
+    await tester.pumpAndSettle();
+    expect(find.byType(TradePage), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
   testWidgets('order filters and personal favorites use account data',
       (tester) async {
@@ -194,7 +252,7 @@ void main() {
     expect(find.text('已完成手表'), findsNothing);
     await tester.tap(find.byType(NavigationDestination).at(4));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('我的收藏'));
+    await tester.tap(find.widgetWithText(ListTile, '我的收藏'));
     await tester.pumpAndSettle();
     expect(find.text('收藏的相机'), findsOneWidget);
     expect(tester.takeException(), isNull);
@@ -210,11 +268,14 @@ void main() {
     await tester.pumpWidget(const YunoApp());
     await tester.pumpAndSettle();
     expect(find.text('市场'), findsOneWidget);
+    await tester.tap(find.byType(NavigationDestination).at(4));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(find.text('日本語'), 250);
     await tester.tap(find.text('日本語'));
     await tester.pumpAndSettle();
     expect(find.text('市場'), findsOneWidget);
     expect(find.text('市场'), findsNothing);
-    expect(find.text('マイページ'), findsOneWidget);
+    expect(find.widgetWithText(NavigationDestination, 'マイページ'), findsOneWidget);
     expect(session.preferences!.getString('language'), 'ja');
   });
   testWidgets(

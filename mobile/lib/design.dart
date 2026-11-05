@@ -1,17 +1,17 @@
 import 'package:flutter/material.dart';
 
 abstract final class YunoColors {
-  static const primary = Color(0xff006e5b);
-  static const ink = Color(0xff182622);
-  static const muted = Color(0xff72807a);
-  static const paper = Color(0xfff2f5f4);
-  static const sage = Color(0xffdeeee8);
-  static const line = Color(0xffd9dfdc);
+  static const primary = Color(0xff24304b);
+  static const ink = Color(0xff25314a);
+  static const muted = Color(0xff858894);
+  static const paper = Color(0xfffaf7f1);
+  static const sage = Color(0xfff0ece1);
+  static const line = Color(0xffd8d2c5);
 }
 
 ThemeData yunoTheme() {
   final border = OutlineInputBorder(
-    borderRadius: BorderRadius.circular(14),
+    borderRadius: BorderRadius.zero,
     borderSide: const BorderSide(color: YunoColors.line),
   );
   return ThemeData(
@@ -51,7 +51,7 @@ ThemeData yunoTheme() {
     filledButtonTheme: FilledButtonThemeData(
       style: FilledButton.styleFrom(
         minimumSize: const Size(0, 48),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        shape: const RoundedRectangleBorder(),
         textStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
       ),
     ),
@@ -59,7 +59,7 @@ ThemeData yunoTheme() {
       style: OutlinedButton.styleFrom(
         minimumSize: const Size(0, 46),
         side: const BorderSide(color: YunoColors.line),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        shape: const RoundedRectangleBorder(),
       ),
     ),
     listTileTheme: const ListTileThemeData(

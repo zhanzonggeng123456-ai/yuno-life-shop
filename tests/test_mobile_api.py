@@ -55,6 +55,7 @@ def test_config_services_and_public_reads():
     client=TestClient(app)
     config=client.get('/api/v1/config').json()
     assert config['max_photos']==10
+    assert config['delivery_rules']['base']=={'S':150,'M':200,'L':250}
     assert {k:v['price'] for k,v in config['services'].items()}=={'cleaning_home':1500,'transport_small':500,'local_delivery':150}
     assert len(config['categories'])==13
     assert client.get('/api/v1/rules').status_code==200
@@ -178,3 +179,35 @@ def test_invalid_json_and_business_rejection_are_json():
     u.post(f'/listings/{lid}/buy',expected=409)
     assert u.client.post('/api/v1/login',json={'email':u.email,'password':'wrong'}).status_code==401
     assert u.client.get('/api/v1/listings/999999',headers=u.headers).headers['content-type'].startswith('application/json')
+
+
+def test_public_market_overview_excludes_demo_unpaid_and_keeps_periods_separate():
+    s=Mobile('overview-s@test.jp');b=Mobile('overview-b@test.jp')
+    lid=s.listing(6000)
+    now=datetime.now(timezone.utc)
+    records=[(6000,'paid',0,now),(4000,'completed',0,now),
+             (2000,'paid',0,now-timedelta(days=40)),
+             (3000,'completed',0,now-timedelta(days=40)),
+             (90000,'paid',1,now),(999,'pending_payment',0,now)]
+    with d.connect() as c:
+        for amount,state,demo,created in records:
+            c.execute('INSERT INTO orders(buyer_id,seller_id,listing_id,goods_amount,total,status,demo,created_at) VALUES(?,?,?,?,?,?,?,?)',
+                      (b.id,s.id,lid,amount,amount,state,demo,created.isoformat()))
+    response=TestClient(app).get('/api/v1/market')
+    assert response.status_code==200
+    summary=response.json()['overview']
+    assert summary['gmv']==15000 and summary['paid_orders']==4 and summary['orders']==5
+    assert summary['recent_30_volume']==10000 and summary['previous_30_volume']==5000
+    assert summary['change_pct']==100.0
+    assert summary['active_count']==1 and summary['active_asking_total']==6000
+    assert len(summary['volume_curve'])==12
+    assert sum(w['volume'] for w in summary['volume_curve'])==15000
+    assert summary['volume_curve'][-1]['volume']==10000
+    assert 'buyer_id' not in response.text and 'seller_id' not in response.text
+
+
+def test_empty_market_overview_has_no_fabricated_change_or_curve():
+    summary=TestClient(app).get('/api/v1/market').json()['overview']
+    assert summary['gmv']==0 and summary['change_pct'] is None
+    assert summary['orders']==0 and summary['active_count']==0
+    assert all(w['volume']==0 for w in summary['volume_curve'])

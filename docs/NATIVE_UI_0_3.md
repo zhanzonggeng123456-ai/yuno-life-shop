@@ -1,5 +1,7 @@
 # 原生界面 · 0.3.0（4）
 
+本页为历史记录，当前参考与真机截图见 [0.4.0 更新](NATIVE_UI_0_4.md)。
+
 参考：[用户提供的 Muse 静态 UI/UX](https://muse.ai/s/yuno-life-codex-jing-tai-yan-shi-ban-vu6yw5xe2xlxox0/4ghjex3pvZY9jTEzJbfCuFDhxumN7Sn6s6QgmIz14vA)。
 用户确认 GitHub main 基线为 `1ab6b8fe`；artifact 后续改动不在该提交内。
 本轮依据可见界面重做 Flutter 原生布局，继续调用 `/api/v1`，无 WebView。

@@ -106,6 +106,6 @@ flutter drive --profile --keep-app-running --no-uninstall-first \
 
 ## 当前界面版本
 
-原生界面已按用户给定 Muse 参考更新为 0.3.0（4），对照及真机截图见
-[NATIVE_UI_0_3.md](NATIVE_UI_0_3.md)。`GET /me` 额外返回当前用户的 `following` 商品列表；
+原生界面已按用户给定 Muse 参考更新为 0.4.0（5），对照及真机截图见
+[NATIVE_UI_0_4.md](NATIVE_UI_0_4.md)。`GET /me` 额外返回当前用户的 `following` 商品列表；
 订单读取中的 `listing` 字段包含商品标题与照片，便于原生订单卡片展示。以上均为读取扩展。

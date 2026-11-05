@@ -7,13 +7,13 @@
 | 项目 | 结果与证据 |
 | --- | --- |
 | 后端兼容 | 原有 97 项测试保持通过；原业务模块及数据库结构不改 |
-| JSON API 集成 | 新增 7 项多流程集成测试；共 104 项后端测试通过 |
+| JSON API 集成 | 新增 7 项多流程集成测试；共 106 项后端测试通过（包含概览统计验证） |
 | 覆盖流程 | token 注册/登录/过期/退出、权限隔离、直购/支付幂等/完成/评价/退款、议价/消息、10 图/封面/替换/草稿/任务/确认发布、拍卖、买断、自营、配送、三项服务、各后台读取 |
 | Flutter 静态检查 | 最终复验 `No issues found` |
-| Flutter 组件测试 | 9 项通过：五页布局、中日文双列长标题、搜索与分类请求、交易跳转、订单状态筛选及收藏数据、登录表单、语言即时刷新及持久化、token 隔离；静态检查无问题 |
-| iOS 编译 | 清理空间后 Profile 与当前正常 Release 均完整构建成功；Release 19.4 MB |
+| Flutter 组件测试 | 10 项通过：五页布局、中日文双列长标题、搜索与分类请求、交易跳转、订单状态筛选及收藏数据、登录表单、语言即时刷新及持久化、token 隔离；静态检查无问题 |
+| iOS 编译 | 清理空间后 Profile 与当前正常 Release 均完整构建成功；当前 0.4.0 Release 44.7 MB（含离线衬线字体） |
 | iOS 安装 | Release 中间产物经本机签名深度验证，可直接安装到连接的 iPhone 16e |
-| iOS 启动 | 0.3.0（4）已安装并成功启动，真机截图显示新版市场及接口商品；详情见 NATIVE_UI_0_3.md。旧版 0.2.0 的验证错误保留在下方历史记录中 |
+| iOS 启动 | 0.4.0（5）已安装并成功启动，真机截图显示新版概览和底部交易圆钮；详情见 NATIVE_UI_0_4.md。旧版 0.2.0 的验证错误保留在下方历史记录中 |
 | iPhone 原生流程测试 | 已进入真实设备流程断言，但首轮注册未通过；后续发现 iOS 本地网络系统弹窗阻断流程，尚未完成。测试脚本增加启动等待、隔离服务器及注册完成等待；不计为通过 |
 | Android 构建 | 0.1.0（2）arm64 Debug APK 约 87 MB，`apksigner verify` 通过；本轮 0.3.0 因空间不足未重新构建 Android 包 |
 | Android 运行 | 已创建独立 YunoNativeAcceptance 测试设备，不使用 Nino AVD；模拟器要求约 7.2 GiB 可用空间，当前不足，尚未启动及执行流程测试 |
@@ -71,3 +71,13 @@ Mac 解锁后的复核：`outputs/iphone-ui-0.2-unlocked.png` 仅证明系统验
 `outputs/backend-tests-muse.log`、`flutter-tests-muse.log`、`flutter-analyze-muse.log`、
 `ios-muse-final-build.log` 及 `docs/previews/iphone-market-0.3.0.png`。
 真机主页通过不等于全部交易流程通过；相机硬件、完整真机流程与 Android 新版运行仍待验收。
+
+## 0.4.0（5）以更新后的 Muse 链接与用户照片为准
+
+0.3.0 采用旧参考，与用户给定照片不符。重新加载链接后确认新版概览结构，完成 0.4.0 原生调整。
+后端 106 项、Flutter 10 项通过，静态检查无问题；Release 44.7 MB 编译、安装与启动通过。
+证据：`backend-tests-0.4.log`、`flutter-tests-0.4.log`、`flutter-analyze-0.4.log`、`ios-build-0.4.log`、
+`iphone-install-0.4.log`、`iphone-launch-0.4.log`、`iphone-version-0.4.log`，日志均在本机忽略目录 `outputs/`。
+实际设备截图及组件预览明确区分，见 [0.4.0 界面说明](NATIVE_UI_0_4.md)。
+已清理本项目 `.dart_tool/flutter_build` 内 20 个旧哈希缓存目录，保留当前构建缓存与安装产物；Nino 文件未动。
+GitHub 已知写入权限不足，本轮代码保留在本地分支，不声称已推送远端。

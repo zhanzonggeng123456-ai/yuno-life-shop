@@ -19,6 +19,7 @@ from . import db as d
 from . import main as legacy
 from .security import can_operate, can_admin, can_appraise, now_tokyo
 from .market import category_stats, listing_price_moves, profit_report, weekly_curve
+from .mobile_overview import marketplace_overview
 from .aijobs import get_job
 from .auctions import compute_price, min_next_bid
 from .oneclick import detail_checklist_for
@@ -112,8 +113,9 @@ def config():
         regions=json.loads(d.get_setting(c,'regions') or '[]')
         services=d.effective_service_prices(d.get_setting(c,'service_prices'))
         commission=legacy.commission_rate(c)
+        delivery_rules=json.loads(d.get_setting(c,'delivery_rules') or '{}')
     return {'name':'Yuno Life','currency':'JPY','timezone':'Asia/Tokyo','max_photos':10,
-            'categories':categories,'regions':regions,'services':services,'commission_rate':commission,'simulated':True,
+            'categories':categories,'regions':regions,'services':services,'commission_rate':commission,'delivery_rules':delivery_rules,'simulated':True,
             'languages':['system','zh','ja'],'valuation_disclaimer':'此报价为AI根据现实数据做出的估价，用户可以根据自身另行填写'}
 
 
@@ -186,7 +188,7 @@ def orders(request:Request): return {'items':me(request)['orders']}
 @router.get('/market')
 def market():
     with d.connect() as c:
-        return {'moves':listing_price_moves(c),'categories':category_stats(c),'curve':weekly_curve(c),'basis':{'zh':'平台真实订单；首次与最近成交价比较；挂牌价不计入涨跌。','ja':'実取引の初回価格と最新価格を比較。出品価格は対象外。'}}
+        return {'overview':marketplace_overview(c,legacy.effective_price),'moves':listing_price_moves(c),'categories':category_stats(c),'curve':weekly_curve(c),'basis':{'zh':'平台真实订单；首次与最近成交价比较；挂牌价不计入涨跌。','ja':'実取引の初回価格と最新価格を比較。出品価格は対象外。'}}
 
 
 @router.get('/auctions')
