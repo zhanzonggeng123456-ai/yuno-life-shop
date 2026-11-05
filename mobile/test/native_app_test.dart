@@ -35,6 +35,37 @@ void main() {
         200,
         headers: {'content-type': 'application/json'}));
   });
+  testWidgets('narrow phone with enlarged text keeps primary pages usable',
+      (tester) async {
+    tester.view.physicalSize = const Size(320, 700);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    for (final language in ['zh', 'ja']) {
+      session.language = language;
+      await tester.pumpWidget(MaterialApp(
+        key: ValueKey(language),
+        theme: yunoTheme(),
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(context)
+              .copyWith(textScaler: TextScaler.linear(1.5)),
+          child: child!,
+        ),
+        home: const HomeShell(),
+      ));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      for (final index in [1, 3, 4]) {
+        await tester.tap(find.byType(NavigationDestination).at(index));
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull);
+      }
+      await tester.tap(find.byType(NavigationDestination).at(2));
+      await tester.pumpAndSettle();
+      expect(find.byType(TradeMenu), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    }
+  });
   testWidgets('five native destinations render at phone width without overflow',
       (tester) async {
     tester.view.physicalSize = const Size(390, 844);

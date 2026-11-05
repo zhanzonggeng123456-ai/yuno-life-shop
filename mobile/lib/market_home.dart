@@ -599,33 +599,36 @@ Widget marketRankBoard(
       child: Column(children: [
         Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-            child: Row(children: [
-              Text(up ? api.tr('涨幅榜', '上昇ランキング') : api.tr('跌幅榜', '下落ランキング'),
-                  style: const TextStyle(
-                      fontSize: 14, fontWeight: FontWeight.w700)),
-              const SizedBox(width: 8),
-              Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-                  decoration: BoxDecoration(
-                      color: up
-                          ? const Color(0xffe2f1e8)
-                          : const Color(0xfff9e4e2),
-                      borderRadius: BorderRadius.circular(3)),
-                  child: Text(
-                      api.tr('${up ? '上涨' : '下跌'} ${items.length} 件',
-                          '${up ? '上昇' : '下落'} ${items.length} 点'),
-                      style: TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.w700,
+            child: Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                alignment: WrapAlignment.spaceBetween,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  Text(up ? api.tr('涨幅榜', '上昇ランキング') : api.tr('跌幅榜', '下落ランキング'),
+                      style: const TextStyle(
+                          fontSize: 14, fontWeight: FontWeight.w700)),
+                  Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 7, vertical: 3),
+                      decoration: BoxDecoration(
                           color: up
-                              ? const Color(0xff267955)
-                              : const Color(0xffb52f33)))),
-              const Spacer(),
-              Text(api.tr('${up ? '涨幅' : '跌幅'}从大到小', '変動率順'),
-                  style:
-                      const TextStyle(fontSize: 10, color: YunoColors.muted)),
-            ])),
+                              ? const Color(0xffe2f1e8)
+                              : const Color(0xfff9e4e2),
+                          borderRadius: BorderRadius.circular(3)),
+                      child: Text(
+                          api.tr('${up ? '上涨' : '下跌'} ${items.length} 件',
+                              '${up ? '上昇' : '下落'} ${items.length} 点'),
+                          style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w700,
+                              color: up
+                                  ? const Color(0xff267955)
+                                  : const Color(0xffb52f33)))),
+                  Text(api.tr('${up ? '涨幅' : '跌幅'}从大到小', '変動率順'),
+                      style: const TextStyle(
+                          fontSize: 10, color: YunoColors.muted)),
+                ])),
         const Divider(height: 1),
         if (items.isEmpty)
           Padding(

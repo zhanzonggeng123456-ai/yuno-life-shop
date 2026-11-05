@@ -2675,9 +2675,15 @@ class _PublishPageState extends State<PublishPage> {
 
   Future<void> gallery() async {
     try {
+      final remaining = 10 - localPhotos.length - remotePhotos.length;
+      if (remaining <= 0) {
+        notify(context, session.tr('每件商品最多 10 张照片。', '写真は10枚までです。'));
+        return;
+      }
       final selected = await picker.pickMultiImage(
         imageQuality: 85,
         maxWidth: 2400,
+        limit: remaining,
       );
       if (selected.length + localPhotos.length + remotePhotos.length > 10) {
         if (mounted) {
@@ -3407,6 +3413,7 @@ class PhotoManager extends StatelessWidget {
                       try {
                         final files = await ImagePicker().pickMultiImage(
                           imageQuality: 85,
+                          limit: 10 - photos.length,
                         );
                         if (files.length + photos.length > 10) {
                           if (context.mounted) {
