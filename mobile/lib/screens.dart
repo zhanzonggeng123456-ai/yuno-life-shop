@@ -121,17 +121,19 @@ class _ConnectionPageState extends State<ConnectionPage> {
         heading('YUNO LIFE SHOP', tx('连接你的中古交易平台', '中古品取引プラットフォームに接続')),
         Text(
           tx(
-            '输入电脑上运行的平台地址，手机与电脑需要连接同一 Wi-Fi。',
-            'パソコンのサーバーアドレスを入力してください。同じ Wi-Fi に接続してください。',
+            '输入平台地址。公网 HTTPS 地址可跨网络使用；局域网地址需连接同一 Wi-Fi。',
+            '接続先を入力してください。公開 HTTPS アドレスは別のネットワークでも利用できます。ローカル接続には同じ Wi-Fi が必要です。',
           ),
         ),
         const SizedBox(height: 20),
         TextField(
           controller: input,
           keyboardType: TextInputType.url,
+          autocorrect: false,
+          enableSuggestions: false,
           decoration: InputDecoration(
             labelText: tx('服务器地址', 'サーバーアドレス'),
-            hintText: 'http://192.168.68.63:8000',
+            hintText: 'https://yuno-life-shop-production.up.railway.app',
           ),
         ),
         const SizedBox(height: 16),

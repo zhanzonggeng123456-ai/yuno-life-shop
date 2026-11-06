@@ -361,7 +361,7 @@ const words = <String, List<String>>{
   'admin_suggestion_approve': ['批准调价', '価格変更を承認'],
   'admin_suggestion_reject': ['拒绝调价', '価格変更を却下'],
   'configure_server': ['请先连接服务器', '先にサーバーに接続してください'],
-  'connection_failed': ['连接失败，请检查 Wi-Fi 和电脑服务', '接続できません。Wi-Fi とサーバーを確認してください'],
+  'connection_failed': ['连接失败，请检查网络后重试', '接続できません。ネットワークを確認して再試行してください'],
   'timeout': ['请求超时，请刷新查看结果后再试', 'タイムアウト。結果を確認してから再試行してください'],
   'session_expired': ['登录已过期，请重新登录', 'セッションが切れました。再ログインしてください'],
   'login_required': ['请先登录', 'ログインしてください'],
