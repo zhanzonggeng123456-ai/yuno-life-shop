@@ -19,8 +19,9 @@ jobs:
         run: |
           git init "$RUNNER_TEMP/flutter"
           git -C "$RUNNER_TEMP/flutter" remote add origin https://github.com/flutter/flutter.git
-          git -C "$RUNNER_TEMP/flutter" fetch --depth 1 origin c197ca5199e9ee5661e865596c9c07294dfab51c
-          git -C "$RUNNER_TEMP/flutter" checkout --detach FETCH_HEAD
+          git -C "$RUNNER_TEMP/flutter" fetch --depth 1 origin tag 3.47.9
+          git -C "$RUNNER_TEMP/flutter" checkout --detach 3.47.9
+          test "$(git -C "$RUNNER_TEMP/flutter" rev-parse HEAD)" = c197ca5199e9ee5661e865596c9c07294dfab51c
           echo "$RUNNER_TEMP/flutter/bin" >> "$GITHUB_PATH"
           "$RUNNER_TEMP/flutter/bin/flutter" --version
       - name: Start isolated acceptance server
@@ -48,7 +49,7 @@ jobs:
           target: google_apis
           disable-animations: true
           working-directory: mobile
-          script: flutter test integration_test/app_test.dart -d emulator-5554 --dart-define=YUNO_SERVER=http://10.0.2.2:8765
+          script: YUNO_QA=true flutter test integration_test/app_test.dart -d emulator-5554 --dart-define=YUNO_SERVER=http://10.0.2.2:8765
       - name: Build internal Android package
         working-directory: mobile
         run: flutter build apk --release --target-platform android-arm64
@@ -65,8 +66,9 @@ jobs:
         run: |
           git init "$RUNNER_TEMP/flutter"
           git -C "$RUNNER_TEMP/flutter" remote add origin https://github.com/flutter/flutter.git
-          git -C "$RUNNER_TEMP/flutter" fetch --depth 1 origin c197ca5199e9ee5661e865596c9c07294dfab51c
-          git -C "$RUNNER_TEMP/flutter" checkout --detach FETCH_HEAD
+          git -C "$RUNNER_TEMP/flutter" fetch --depth 1 origin tag 3.47.9
+          git -C "$RUNNER_TEMP/flutter" checkout --detach 3.47.9
+          test "$(git -C "$RUNNER_TEMP/flutter" rev-parse HEAD)" = c197ca5199e9ee5661e865596c9c07294dfab51c
           echo "$RUNNER_TEMP/flutter/bin" >> "$GITHUB_PATH"
           "$RUNNER_TEMP/flutter/bin/flutter" --version
       - name: Backend regression and isolated acceptance server

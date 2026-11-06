@@ -16,7 +16,7 @@ android {
 
     defaultConfig {
         // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
-        applicationId = if (providers.gradleProperty("yunoQa").orNull == "true")
+        applicationId = if (providers.environmentVariable("YUNO_QA").orNull == "true")
             "com.yunolife.shop.qa" else "com.yunolife.shop"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.

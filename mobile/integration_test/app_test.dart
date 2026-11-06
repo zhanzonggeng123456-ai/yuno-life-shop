@@ -52,7 +52,7 @@ void main() {
       expect(find.byType(ActionForm), findsNothing);
       expect(app.user?['email'], sellerEmail);
       final sellerId = app.user!['id'];
-      expect(await app.secure.read(key: 'session:${app.server}'), app.token);
+      expect((await app.secure.read(key: 'session:${app.server}')) == app.token, isTrue);
 
       // Valid small PNGs, isolated to the QA database and device temp directory.
       final bytes = base64Decode(

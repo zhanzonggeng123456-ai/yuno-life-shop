@@ -57,7 +57,7 @@ flutter test integration_test/app_test.dart -d 设备ID --dart-define=YUNO_SERVE
 图片文件在测试中生成，相机硬件流程需另行真机验证。
 
 Android 自动化测试时通过环境变量
-`ORG_GRADLE_PROJECT_yunoQa=true` 使用独立包名 `com.yunolife.shop.qa`。
+`YUNO_QA=true` 使用独立包名 `com.yunolife.shop.qa`。
 这让测试登录信息与普通试用包分开存放。
 
 磁盘紧张时可在真机上使用 profile 驱动方式：
