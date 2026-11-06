@@ -20,7 +20,7 @@ AI 驱动、全品类、支持多种交易模式的中古交易平台。
 然后运行 `python run.py`。客户端可在个人中心修改服务器地址。
 现有网页入口和本地数据库继续兼容。
 
-后端验证命令为 `python -m pytest tests -q`，包含原有业务测试与原生接口测试。
+后端验证先安装 `python -m pip install -r requirements.txt -r requirements-cloud.txt -r requirements-backup.txt`，再运行 `python -m pytest tests -q`，包含业务、原生接口、持久化与备份恢复测试。
 
 ```bash
 ./start.sh
