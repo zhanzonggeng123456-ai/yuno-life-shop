@@ -6,6 +6,19 @@ AI 驱动、全品类、支持多种交易模式的中古交易平台。
 
 ## 一条命令启动
 
+### 原生手机 App
+
+新增的 `mobile/` 是 Flutter 单代码库原生客户端，提供 Android 和 iOS 工程。
+构建、手机连接和验收方法见 [mobile/README.md](mobile/README.md)。
+接口说明见 [docs/MOBILE_API.md](docs/MOBILE_API.md)。
+实现要求保留在 [CODEX_APP_BRIEF.md](CODEX_APP_BRIEF.md)。
+
+手机使用局域网后端时，在 PowerShell 设置 `$env:YUNO_HOST="0.0.0.0"`，
+然后运行 `python run.py`。客户端可在个人中心修改服务器地址。
+现有网页入口和本地数据库继续兼容。
+
+后端验证命令为 `python -m pytest tests -q`，包含原有业务测试与原生接口测试。
+
 ```bash
 ./start.sh
 ```

@@ -42,6 +42,9 @@ from .security import (LOGIN_LIMIT, LOGIN_WINDOW, REGISTER_LIMIT,
 app = FastAPI(title="Yuno Life")
 d.init_db()
 
+from .api import router as native_api_router
+app.include_router(native_api_router)
+
 
 @app.middleware("http")
 async def _origin_guard(request, call_next):
@@ -245,7 +248,7 @@ def redirect(url, msg=""):
 
 
 async def _friendly_http_error(request, exc):
-    if request.url.path.startswith("/ai-jobs") or request.url.path == "/healthz":
+    if request.url.path.startswith(("/api/v1/", "/ai-jobs")) or request.url.path == "/healthz":
         return JSONResponse({"detail": exc.detail}, status_code=exc.status_code)
     try:
         lang = lang_from(request)
@@ -278,7 +281,7 @@ app.add_exception_handler(_StarletteHTTPException, _friendly_http_error)
 @app.exception_handler(RequestValidationError)
 async def _friendly_validation_error(request, exc):
     # 畸形输入统一返回 400(而非框架默认 422),并给友好页面/JSON。
-    if request.url.path.startswith("/ai-jobs"):
+    if request.url.path.startswith(("/api/v1/", "/ai-jobs")):
         return JSONResponse({"detail": "bad input"}, status_code=400)
     try:
         lang = lang_from(request)
