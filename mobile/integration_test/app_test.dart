@@ -25,6 +25,20 @@ void main() {
     expect(tester.takeException(), isNull);
   }
 
+  // Hardware keyboards can send delayed updates after tester.enterText on Vivo.
+  // Populate the native form controllers without invoking the system IME;
+  // manual camera/form acceptance separately covers real keyboard entry.
+  void fill(WidgetTester tester, Finder finder, String value) {
+    final widget = tester.widget(finder);
+    final controller = widget is TextFormField
+        ? widget.controller!
+        : (widget as TextField).controller!;
+    controller.value = TextEditingValue(
+      text: value,
+      selection: TextSelection.collapsed(offset: value.length),
+    );
+  }
+
   testWidgets(
     'Native login, photos, AI draft, trading, services, messages and language',
     (tester) async {
@@ -48,9 +62,9 @@ void main() {
       await settle(tester);
       final sellerEmail = '${randomText()}@example.jp';
       final sellerPassword = randomText();
-      await tester.enterText(find.byType(TextFormField).at(0), sellerEmail);
-      await tester.enterText(find.byType(TextFormField).at(1), 'QA 出品者');
-      await tester.enterText(find.byType(TextFormField).at(2), sellerPassword);
+      fill(tester, find.byType(TextFormField).at(0), sellerEmail);
+      fill(tester, find.byType(TextFormField).at(1), 'QA 出品者');
+      fill(tester, find.byType(TextFormField).at(2), sellerPassword);
       final submit = find.widgetWithText(FilledButton, '注册');
       FocusManager.instance.primaryFocus?.unfocus();
       await settle(tester);
@@ -140,7 +154,7 @@ void main() {
         ),
       );
       await settle(tester);
-      await tester.enterText(find.byType(TextField).last, 'QA 商品の状態を確認します');
+      fill(tester, find.byType(TextField).last, 'QA 商品の状態を確認します');
       FocusManager.instance.primaryFocus?.unfocus();
       await settle(tester);
       await tester.tap(find.byIcon(Icons.send_outlined));

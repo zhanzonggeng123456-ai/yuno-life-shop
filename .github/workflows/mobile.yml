@@ -109,8 +109,12 @@ jobs:
       - name: Native iOS acceptance
         timeout-minutes: 20
         working-directory: mobile
-        run: flutter drive --driver=test_driver/integration_test.dart --target=integration_test/app_test.dart -d "$DEVICE_ID" --dart-define=YUNO_SERVER=http://127.0.0.1:8765
+        run: |
+          set -o pipefail
+          flutter drive --verbose --driver=test_driver/integration_test.dart --target=integration_test/app_test.dart -d "$DEVICE_ID" --dart-define=YUNO_SERVER=http://127.0.0.1:8765 2>&1 | tee "$RUNNER_TEMP/yuno-ios-driver.log"
       - name: Build and launch simulator app
+        if: ${{ !cancelled() }}
+        timeout-minutes: 12
         working-directory: mobile
         run: |
           flutter build ios --simulator --debug --dart-define=YUNO_SERVER=http://127.0.0.1:8765
@@ -127,4 +131,5 @@ jobs:
             mobile/build/ios/yuno-ios-simulator.zip
             mobile/build/ios/yuno-iphone.png
             /Users/runner/work/_temp/yuno-server.log
+            /Users/runner/work/_temp/yuno-ios-driver.log
           if-no-files-found: ignore

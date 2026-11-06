@@ -48,7 +48,7 @@ flutter build ios --simulator --debug --dart-define=YUNO_SERVER=http://127.0.0.1
 ```sh
 flutter analyze
 flutter test test
-flutter test integration_test/app_test.dart -d 设备ID --dart-define=YUNO_SERVER=http://验收服务器IP:8765
+flutter drive --driver=test_driver/integration_test.dart --target=integration_test/app_test.dart -d 设备ID --dart-define=YUNO_SERVER=http://验收服务器IP:8765
 ```
 
 端到端测试需要专用的空白验收数据库与上传目录。测试随机生成账号口令，
