@@ -132,7 +132,9 @@ flutter drive --profile --keep-app-running --no-uninstall-first \
 
 ## 当前界面版本
 
-当前正常试用包为 0.4.2（7），修复后台佣金越界误报成功，实测见 [验收记录](NATIVE_ACCEPTANCE.md)。
+当前正常试用包为 0.4.3（8），修复后台佣金越界与拍卖拒绝状态误报成功，实测见 [验收记录](NATIVE_ACCEPTANCE.md)。
 界面沿用按用户给定 Muse 参考及手机照片调整的 0.4.1 排版，排版说明见
 [NATIVE_UI_0_4_1.md](NATIVE_UI_0_4_1.md)。`GET /me` 额外返回当前用户的 `following` 商品列表；
 订单读取中的 `listing` 字段包含商品标题与照片，便于原生订单卡片展示。以上均为读取扩展。
+
+`integration_test/closure_flow_test.dart` 使用同一隔离角色工具与新运行编号，补验拍卖保证金/出价拒绝恢复、一口价取消、后台角色修改、商品上下架和扫描审计。不是相机或系统键盘测试。

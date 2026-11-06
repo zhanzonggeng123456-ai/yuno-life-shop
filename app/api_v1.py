@@ -373,7 +373,8 @@ async def proxy(request:Request,path:str):
             return JSONResponse({'error':message or 'authentication_failed'},status_code=401 if path=='/login' else 400)
         token=cookie['yuno_session'].value
         return {'access_token':token,'token_type':'bearer'}
-    if message != 'already_paid' and re.search(r'(^|_)(invalid|bad|cannot|own|not|needs|pending|forbidden|conflict|requires|failed|error|out_of_range)(_|$)',message):
+    auction_rejected = message in {'deposit_required', 'auction_ended', 'proxy_below_bid', 'no_buy_now'} or message.startswith('bid_too_low:')
+    if auction_rejected or (message != 'already_paid' and re.search(r'(^|_)(invalid|bad|cannot|own|not|needs|pending|forbidden|conflict|requires|failed|error|out_of_range)(_|$)',message)):
         return JSONResponse({'error':message,'next':location.split('?')[0]},status_code=409)
     # Redirect messages are business outcomes, not proof of success. Clients show
     # the result and reload authoritative resources after every command.

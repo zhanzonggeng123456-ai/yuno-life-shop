@@ -107,6 +107,23 @@ void notify(BuildContext context, String text) {
 
 String failure(Object? error) {
   if (error is ApiError) {
+    if (error.code == 'deposit_required') {
+      return session.tr('请先完成模拟保证金，再提交出价。', '模擬保証金の手続き後に入札してください。');
+    }
+    if (error.code.startsWith('bid_too_low:')) {
+      final minimum = int.tryParse(error.code.split(':').last);
+      if (minimum != null) {
+        return session.tr(
+            '出价至少为 ¥$minimum，请修改后重新提交。', '入札額は¥$minimum以上で入力してください。');
+      }
+    }
+    if (error.code == 'proxy_below_bid') {
+      return session.tr('代理出价上限不能低于本次出价。', '自動入札の上限額は今回の入札額以上で入力してください。');
+    }
+    if (error.code == 'auction_ended' || error.code == 'no_buy_now') {
+      return session.tr(
+          '拍卖状态已变化，请返回并刷新最新状态。', 'オークションの状態が変わりました。戻って最新状態を確認してください。');
+    }
     if (error.code == 'rate_out_of_range') {
       return session.tr(
           '佣金比例须在 7%–10% 之间，请修改后重新提交。', '手数料率は7%〜10%の範囲で入力してください。');

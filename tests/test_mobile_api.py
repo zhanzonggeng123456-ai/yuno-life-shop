@@ -221,3 +221,26 @@ def test_empty_market_overview_has_no_fabricated_change_or_curve():
     assert summary['gmv']==0 and summary['change_pct'] is None
     assert summary['orders']==0 and summary['active_count']==0
     assert all(w['volume']==0 for w in summary['volume_curve'])
+
+
+def test_auction_rejections_preserve_bid_state():
+    seller = Mobile('auction-reject-s@test.jp')
+    buyer = Mobile('auction-reject-b@test.jp')
+    lid = seller.listing()
+    aid = int(seller.post(f'/listings/{lid}/auction', {
+        'start_price': 1000, 'ends_at': (datetime.now(timezone.utc) + timedelta(days=1)).isoformat(),
+        'deposit_required': '1', 'deposit_amount': 100,
+    })['next'].split('/')[-1])
+    assert buyer.post(f'/auctions/{aid}/bid', {'amount': 1000}, expected=409)['error'] == 'deposit_required'
+    assert buyer.get(f'/auctions/{aid}')['bids'] == []
+    buyer.post(f'/auctions/{aid}/deposit')
+    assert buyer.post(f'/auctions/{aid}/bid', {'amount': 500}, expected=409)['error'] == 'bid_too_low:1000'
+    assert buyer.post(f'/auctions/{aid}/bid', {'amount': 1000, 'proxy_max': 500}, expected=409)['error'] == 'proxy_below_bid'
+    assert buyer.post(f'/auctions/{aid}/buy-now', expected=409)['error'] == 'no_buy_now'
+    assert buyer.get(f'/auctions/{aid}')['bids'] == []
+    buyer.post(f'/auctions/{aid}/bid', {'amount': 1000, 'proxy_max': 2000})
+    assert len(buyer.get(f'/auctions/{aid}')['bids']) == 1
+    with d.connect() as conn:
+        conn.execute("UPDATE auctions SET ends_at=? WHERE id=?", ((datetime.now(timezone.utc) - timedelta(seconds=1)).isoformat(), aid))
+    assert buyer.post(f'/auctions/{aid}/bid', {'amount': 1100}, expected=409)['error'] == 'auction_ended'
+    assert len(buyer.get(f'/auctions/{aid}')['bids']) == 1
