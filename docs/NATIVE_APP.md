@@ -104,6 +104,28 @@ flutter drive --profile --keep-app-running --no-uninstall-first \
 保留 `--keep-app-running --no-uninstall-first`，避免测试结束卸载 App，或在重装时重置权限。
 测试后重新安装以 `lib/main.dart` 为入口的正常 Release 包。
 
+### 角色与异常流程
+
+`integration_test/role_flow_test.dart` 补验配送、买断、服务、退款争议、原生登录及后台读取。
+先启动独立 8003 服务并确认数据库已创建；使用新的数字运行编号，两个命令保持一致：
+
+```bash
+# 仓库根目录；仅允许 data/acceptance-*/yuno.db，不接受日常数据库
+python3 mobile/tool/acceptance_roles.py \
+  --db data/acceptance-本轮编号/yuno.db --run-id "$YUNO_ACCEPTANCE_RUN_ID"
+# 另一终端，mobile/ 下
+flutter drive --profile --keep-app-running --no-uninstall-first \
+  --driver test_driver/native_driver.dart --target integration_test/role_flow_test.dart \
+  -d 设备UDID --dart-define=API_BASE_URL=http://Mac的局域网IP:8003 \
+  --dart-define=ACCEPTANCE_RUN_ID="$YUNO_ACCEPTANCE_RUN_ID"
+```
+
+编号每轮换新。Host 工具只给本轮三个精确测试邮箱分配 admin/courier/appraiser，
+最多存活 20 分钟；无 HTTP 管理入口，不读取、生成或打印口令/token。
+账号由设备测试通过注册接口创建，随机口令仅保留在测试内存中。
+角色准备是测试 fixture，不计为管理员角色分配界面已验收；切换角色会话由脚本完成。
+完成后停止 Host 工具与独立 8003 服务，恢复正常 Release 和 8002 服务。
+
 最终结果见 [NATIVE_ACCEPTANCE.md](NATIVE_ACCEPTANCE.md)。真实收款、真实物流、
 付费模型与商店上架均不在范围内。原后端 CSRF、图片审核等遗留边界仍见根 README。
 
