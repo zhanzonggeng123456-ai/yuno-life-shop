@@ -96,6 +96,10 @@ flutter drive --profile --keep-app-running --no-uninstall-first \
 设备测试应使用独立的 `YUNO_DB_PATH`、`YUNO_UPLOAD_DIR`。
 流程测试中的 picker 是测试专用图片入口，用于验证后置相机意图、10 图预览、
 实际上传和发布；它不能证明相机硬件、权限弹窗或 HEIC 已验收。
+脚本显式注册测试文字输入通道，因此验证的是表单内容和提交，不是系统键盘。
+交易场景通过 JSON 命令准备卖家、商品及拍卖，再在真实设备的原生详情页、
+消息页和交易表单操作并核对 API 状态；买家准备登录与部分页面定位由测试驱动，
+不能据此声称这些导航和每个角色后台都已逐项人工验收。
 测试前先在同一 bundle ID 的 App 中允许本地网络访问；Flutter 组件测试不能点击 iOS 系统权限弹窗。
 保留 `--keep-app-running --no-uninstall-first`，避免测试结束卸载 App，或在重装时重置权限。
 测试后重新安装以 `lib/main.dart` 为入口的正常 Release 包。

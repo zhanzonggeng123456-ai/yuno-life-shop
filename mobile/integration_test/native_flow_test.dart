@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:image_picker_platform_interface/image_picker_platform_interface.dart';
 import 'package:yuno_life/main.dart' as app;
+import 'package:yuno_life/labels.dart' as copy;
 
 // Test media gateway: verifies native UI and rear-camera intent, not camera hardware.
 class FixturePicker extends ImagePickerPlatform {
@@ -34,6 +35,10 @@ void main() {
   testWidgets(
       'live native registration, photo editing, AI, publishing, logout and languages',
       (tester) async {
+    // IntegrationTest uses the real keyboard by default. enterText needs the
+    // test input channel registered; otherwise Profile can silently send no text.
+    // This validates form submission, not the physical iOS keyboard.
+    binding.testTextInput.register();
     final preferences = await SharedPreferences.getInstance();
     final previousServer = preferences.getString('server');
     final previousLanguage = preferences.getString('language') ?? 'system';
@@ -48,19 +53,20 @@ void main() {
         EnginePhase.sendSemanticsUpdate,
         const Duration(minutes: 2));
     Future<void> reveal(Finder finder, {double delta = 220}) async {
-      if (finder.evaluate().isEmpty) {
-        await tester.scrollUntilVisible(finder, delta,
-            scrollable: find.byType(Scrollable).first, maxScrolls: 40);
-      } else {
-        await tester.ensureVisible(finder);
+      for (var i = 0; i < 40 && finder.evaluate().isEmpty; i++) {
+        await tester.drag(find.byType(Scrollable).first, Offset(0, -delta));
+        await settle();
       }
+      expect(finder.evaluate().isNotEmpty, isTrue,
+          reason: 'Requested control was not built after scrolling');
+      await tester.ensureVisible(finder.first);
       await settle();
     }
 
     Future<void> tapText(String text, {double delta = 220}) async {
-      final finder = find.text(text).last;
+      final finder = find.text(text);
       await reveal(finder, delta: delta);
-      await tester.tap(finder);
+      await tester.tap(finder.last);
       await settle();
     }
 
@@ -96,6 +102,12 @@ void main() {
           'phone-${DateTime.now().microsecondsSinceEpoch}@acceptance.invalid');
       await tester.enterText(field('密码'), secret);
       await tester.enterText(field('昵称'), '原生验收 DEMO');
+      expect(tester.widget<TextField>(field('邮箱')).controller!.text.isNotEmpty,
+          isTrue,
+          reason: 'Test email input was not delivered');
+      expect(tester.widget<TextField>(field('密码')).controller!.text == secret,
+          isTrue,
+          reason: 'Test password input was not delivered');
       FocusManager.instance.primaryFocus?.unfocus();
       await settle();
       await tapText('注册');
@@ -126,7 +138,7 @@ void main() {
       expect((draft['photos'] as List).length, 10);
       stage('AI_ten_photos');
       final previousCover = draft['photos'][1]['url'];
-      await reveal(find.byType(PopupMenuButton<String>).first, delta: -220);
+      await reveal(find.byType(PopupMenuButton<String>), delta: -220);
       await tester.tap(find.byType(PopupMenuButton<String>).at(1));
       await settle();
       await tapText('设为封面');
@@ -141,7 +153,7 @@ void main() {
       draft = await app.session.get('/oneclick/$did');
       expect((draft['photos'] as List).length, 10);
       picker.rearRequested = false;
-      await reveal(find.byType(PopupMenuButton<String>).first, delta: -220);
+      await reveal(find.byType(PopupMenuButton<String>), delta: -220);
       await tester.tap(find.byType(PopupMenuButton<String>).first);
       await settle();
       await tapText('重拍');
@@ -180,6 +192,147 @@ void main() {
       await tapText('中文');
       expect(find.widgetWithText(NavigationDestination, '市场'), findsOneWidget);
       expect(tester.takeException(), isNull);
+      stage('publish_logout_languages_passed');
+
+      // Fixtures use public JSON commands; all actions below use native forms.
+      final stamp = DateTime.now().microsecondsSinceEpoch;
+      final sellerResponse = await app.session.client.post(
+        app.session.uri('/register'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'email': 'seller-$stamp@acceptance.invalid',
+          'password': secret,
+          'display_name': 'DEMO 验收卖家'
+        }),
+      );
+      expect(sellerResponse.statusCode, 200);
+      final sellerToken = jsonDecode(sellerResponse.body)['access_token'];
+      Future<Map<String, dynamic>> sellerPost(String path, Map data) async {
+        final response = await app.session.client.post(app.session.uri(path),
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': 'Bearer $sellerToken'
+            },
+            body: jsonEncode(data));
+        expect(response.statusCode, 200,
+            reason: 'Seller fixture command failed');
+        return Map<String, dynamic>.from(jsonDecode(response.body));
+      }
+
+      Future<int> sellerListing(String title) async {
+        final result = await sellerPost('/listings/new', {
+          'category_slug': 'appliance',
+          'title_ja': title,
+          'title_zh': title,
+          'price': 6000,
+          'region': 'sakado'
+        });
+        return int.parse('${result['next']}'.split('/').last);
+      }
+
+      final fixedId = await sellerListing('DEMO native fixed');
+      final offerId = await sellerListing('DEMO native offer');
+      final auctionListingId = await sellerListing('DEMO native auction');
+      final auctionResult =
+          await sellerPost('/listings/$auctionListingId/auction', {
+        'start_price': 1000,
+        'buy_now_price': 6000,
+        'ends_at': DateTime.now()
+            .toUtc()
+            .add(const Duration(hours: 1))
+            .toIso8601String()
+      });
+      final auctionId = int.parse('${auctionResult['next']}'.split('/').last);
+      await app.session.authenticate(true, {
+        'email': 'buyer-$stamp@acceptance.invalid',
+        'password': secret,
+        'display_name': 'DEMO 验收买家'
+      });
+      Future<void> showDetail(String path) async {
+        await tester.pumpWidget(MaterialApp(
+            key: UniqueKey(), home: app.DetailPage(path: path, title: '验收详情')));
+        await settle();
+      }
+
+      Future<void> command(String path, String ending,
+          [Map<String, String> inputs = const {}]) async {
+        final detail = await app.session.get(path);
+        final action = (detail['actions'] as List)
+            .firstWhere((a) => '${a['path']}'.endsWith(ending));
+        await showDetail(path);
+        await tapText(app.session.local(action['label']));
+        for (final input in inputs.entries) {
+          final control = field(copy.label(app.session, input.key));
+          await reveal(control);
+          await tester.enterText(control, input.value);
+        }
+        FocusManager.instance.primaryFocus?.unfocus();
+        await settle();
+        await tapText('确认提交');
+      }
+
+      await command('/listings/$fixedId', '/follow');
+      expect(((await app.session.get('/me'))['following'] as List).length, 1);
+      await showDetail('/listings/$fixedId');
+      await tapText('联系卖家');
+      await tester.enterText(
+          field(copy.label(app.session, 'body')), 'DEMO 站内消息验收');
+      FocusManager.instance.primaryFocus?.unfocus();
+      await settle();
+      await tapText('发送');
+      final buyerId = app.session.me!['id'];
+      expect(
+          ((await app.session.get('/messages/$fixedId/$buyerId'))['items']
+                  as List)
+              .length,
+          1);
+      await command('/listings/$fixedId', '/buy');
+      final orderId = (await app.session.get('/me'))['orders'][0]['id'];
+      await command('/orders/$orderId', '/pay');
+      expect((await app.session.get('/orders/$orderId'))['status'], 'paid');
+      await command('/orders/$orderId', '/delivery-request');
+      expect(((await app.session.get('/me'))['deliveries'] as List).length, 1);
+      await command('/orders/$orderId', '/complete');
+      expect(
+          (await app.session.get('/orders/$orderId'))['status'], 'completed');
+      await command('/orders/$orderId', '/review', {'comment': 'DEMO 原生评价'});
+      stage('native_fixed_pay_delivery_complete_review_chat_follow');
+      await command('/listings/$offerId', '/offer', {'amount': '5000'});
+      final offer = (await app.session.get('/me'))['offers'][0]['id'];
+      await sellerPost('/offers/$offer/counter', {'counter_amount': 5500});
+      await command('/offers/$offer', '/accept-counter');
+      expect((await app.session.get('/me'))['orders'][0]['goods_amount'], 5500);
+      await command('/auctions/$auctionId', '/bid');
+      expect(
+          ((await app.session.get('/auctions/$auctionId'))['bids'] as List)
+              .length,
+          1);
+      final ownResult = await app.session.post('/listings/new', {
+        'category_slug': 'appliance',
+        'title_ja': 'DEMO native buyback',
+        'price': 5000,
+        'region': 'sakado'
+      });
+      await command('${ownResult['next']}', '/buyback/new');
+      expect(((await app.session.get('/me'))['buybacks'] as List).length, 1);
+      for (final service in (app.session.config['services'] as Map).entries) {
+        await tester.pumpWidget(MaterialApp(
+            key: UniqueKey(), home: const Scaffold(body: app.TradePage())));
+        await settle();
+        final name = app.session.name(Map<String, dynamic>.from(service.value));
+        await reveal(find.text(name));
+        final tile =
+            find.ancestor(of: find.text(name), matching: find.byType(ListTile));
+        await tester.tap(
+            find.descendant(of: tile, matching: find.byType(FilledButton)));
+        await settle();
+        await tapText('确认提交');
+      }
+      expect(
+          ((await app.session.get('/me'))['service_orders'] as List).length, 3);
+      expect(tester.takeException(), isNull);
+      await app.session.signOut();
+      stage('native_offer_auction_buyback_three_services');
       binding.reportData = {
         'stage': 'passed',
         'platform': Platform.operatingSystem,
@@ -190,6 +343,7 @@ void main() {
       };
       debugPrint('ACCEPTANCE: passed');
     } finally {
+      binding.testTextInput.unregister();
       if (previousServer == null) {
         await preferences.remove('server');
       } else {

@@ -14,8 +14,8 @@
 | iOS 编译 | 清理空间后 Profile 与当前正常 Release 均完整构建成功；当前 0.4.0 Release 44.7 MB（含离线衬线字体） |
 | iOS 安装 | Release 中间产物经本机签名深度验证，可直接安装到连接的 iPhone 16e |
 | iOS 启动 | 解锁及恢复联网后的复验，系统接受 0.4.0（5）启动；Profile 测试包也已启动并连接 VM 服务。之前签名/信任拒绝记录保留在下方，不能代表后续每次安装均可靠启动 |
-| iPhone 原生流程测试 | 已连接真实设备并执行到 ACCEPTANCE: boot；发现同一 iPhone 上另有 Nino 的 xcodebuild 自动测试争用前台。已主动停止 Yuno 测试、恢复正常 Release，未终止 Nino。注册及后续流程仍未通过，待设备可独占时重跑 |
-| Android 构建 | 仅保留历史 0.1.0（2）arm64 Debug APK 约 87 MB，`apksigner verify` 通过；0.4.0 未构建。当前不足 1 GiB 空间，且本项目固定的 NDK 28.2 已在之前清理，需要重新安装 |
+| iPhone 原生流程测试 | 排队后设备空闲，扩展真实设备场景在 68 秒内通过。覆盖注册、多图、AI、上架、退出、语言及原生直购/模拟支付/配送预约/评价/消息/收藏/议价/拍卖出价/买断申请/三项服务。媒体与文字输入为测试入口；角色后台、系统权限与真实硬件不能据此计为通过 |
+| Android 构建 | 仅保留历史 0.1.0（2）APK；当前 0.4.0 构建尝试补齐 NDK 28.2 后磁盘只剩约 197 MiB，已主动停止本项目 Gradle 并清除新增 NDK 28，保留原有 NDK 27。新版未构建成功，未计通过 |
 | Android 运行 | 已创建独立 YunoNativeAcceptance 测试设备，不使用 Nino AVD；模拟器要求约 7.2 GiB 可用空间，当前不足，尚未启动及执行流程测试 |
 | 相机/相册硬件 | 未验收，测试 picker 不能替代硬件测试 |
 | 商店/真实支付/真实物流 | 明确不做，界面均作模拟说明 |
@@ -107,3 +107,20 @@ GitHub 已知写入权限不足，本轮代码保留在本地分支，不声称�
 - 主动中断本项目 Flutter drive，日志中的 Service has disappeared 是停止测试后连接消失，不据此判定业务崩溃；注册、照片、AI、上架等后续阶段均不计通过。未终止或修改 Nino 测试。
 - 已从最终正常构建的 `mobile/build/ios/Release-iphoneos/Runner.app` 恢复安装 0.4.0（5），签名深度校验及安装成功；没有留下 integration_test 测试包。恢复安装日志 `outputs/acceptance-unlocked-restored.log`。为避免争抢设备，恢复后未再次强制拉起应用。
 - 已请求用户在 Nino 测试结束或由对应任务暂停后告知，再继续 Yuno 真机验收。完整验收结论仍为未通过。
+
+### 排队释放后的设备验收（2026-11-05，纽约）
+
+只读检查确认不再有其他真机测试占用该 UDID 后续验；未终止任何 Nino 进程。
+设备仍连接，独立 8003 与正常 8002 服务已恢复，分别使用验收与日常数据目录。
+
+1. 修正测试输入：IntegrationTest 默认使用真实文字输入通道，Profile 中原脚本 `enterText` 未将内容写入，造成空表单注册被后端 400 拒绝。显式注册测试文字输入通道并增加不输出凭据的布尔断言，重跑注册通过。不是通过放宽后端验证使测试通过。
+2. 修正测试定位：`Finder.first` 在懒加载列表尚未构建目标时会直接报 No element；改为先滚动至控件存在再定位。原生产品代码未因测试而改变。
+3. 发布场景完整通过：真实 Keychain、注册、默认后置相机调用意图、10 图实际上传、AI、封面、删除后补图、重拍/替换、手动售价、用户确认上架、退出清理 token、中日文即时切换。媒体是合法 PNG fixture，不能证明相机权限、硬件、HEIC 或真实相册；文字输入同样是测试通道，不能证明系统键盘。
+4. 扩展交易场景通过：在独立库用公共 JSON 命令准备卖家、商品、拍卖和买家会话，再使用真机原生详情页、消息页及表单执行收藏、消息、直购、模拟支付、配送预约、确认收货、评价、议价及接受卖家还价、拍卖出价、买断申请和三项服务预约。用 API 核对收藏、消息、订单状态/金额、配送记录、出价、买断与服务记录。部分页面由测试直接定位，运营角色审核/收购付款、配送员履约、退款争议全链路等没有在本次客户端测试中执行；原后端测试覆盖不替代这些原生验收。
+5. 最终扩展场景日志 `outputs/acceptance-queue-business.log` 显示所有阶段以及 All tests passed，耗时 68 秒（1 个完整场景，框架 teardown 不另计业务用例）；较早输入/滚动失败日志分别保留在 `acceptance-queue-resume.log`、`acceptance-queue-input-fixed.log`。最终静态检查 `acceptance-queue-analyze.log` 无问题。
+6. 结束后已恢复签名验证通过的正常 Release `mobile/build/ios/Release-iphoneos/Runner.app`，重新安装并启动成功。截图见 [恢复后的实际 iPhone 主页](previews/iphone-acceptance-restored-0.4.0.png)，不是组件预览；正常服务统计仍为零，没有把验收交易写入日常库。安装/启动日志 `acceptance-queue-restored.log`、`acceptance-queue-normal-launch.log`。已请求用户补验真实拍照及相册添加，尚未收到结果。
+7. Android 已实际尝试当前 0.4.0 构建。设置本机 JDK 17 后开始 Gradle，成功下载/解压要求的 NDK 28.2，但可用空间从约 4 GiB 降到 197 MiB；为避免磁盘写满，主动停止本项目 Flutter/Gradle 构建。移除本次新增 NDK 28 后恢复约 3 GiB，保留原有 NDK 27、Gradle 下载缓存和 Nino 内容。新版 APK 没有生成，Android 安装、运行均未计通过。需准备更多空间后续验（建议构建前至少 8 GiB）。日志 `acceptance-queue-android-build.log`。
+8. 仅清理本项目 iOS Profile 与重复的 iphoneos 产物、Release 内除正常 Runner.app 外的中间文件；正常安装包保留。Nino、共享证书及描述文件未动。
+
+当前结论：iOS 主要业务场景已有真实设备自动化通过证据，但 **完整验收仍未通过**。
+剩余重点为真实硬件/权限、Android 当前版本及未执行的角色与异常流程，不以已通过场景代替。
