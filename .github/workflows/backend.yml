@@ -2,7 +2,7 @@ name: Public backend validation
 on:
   push:
     branches: [main, codex/public-backend]
-    paths: ['app/**', 'deploy/**', 'tests/**', 'scripts/cloud_smoke.py', 'requirements.txt', 'Dockerfile', '.dockerignore', '.github/workflows/backend.yml']
+    paths: ['app/**', 'deploy/**', 'tests/**', 'scripts/cloud_smoke.py', 'requirements*.txt', 'Dockerfile', '.dockerignore', '.github/workflows/backend.yml']
   workflow_dispatch:
 permissions:
   contents: read
@@ -19,6 +19,7 @@ jobs:
         run: |
           python3 -m venv .venv
           .venv/bin/pip install -r requirements.txt
+          .venv/bin/pip install -r requirements-backup.txt
           .venv/bin/python -m pytest tests -q
       - name: Build isolated YUNO container
         run: docker build --tag yuno-backend-ci .
