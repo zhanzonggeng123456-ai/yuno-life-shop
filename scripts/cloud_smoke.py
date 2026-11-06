@@ -2,6 +2,7 @@
 import argparse
 import base64
 import hashlib
+import http.client
 import json
 import os
 import secrets
@@ -36,7 +37,7 @@ def main():
         try:
             assert request("/healthz")["ok"]
             break
-        except (urllib.error.URLError, TimeoutError):
+        except (OSError, http.client.HTTPException):
             if attempt == 29:
                 raise
             time.sleep(1)
