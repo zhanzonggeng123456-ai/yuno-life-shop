@@ -107,6 +107,10 @@ void notify(BuildContext context, String text) {
 
 String failure(Object? error) {
   if (error is ApiError) {
+    if (error.code == 'rate_out_of_range') {
+      return session.tr(
+          '佣金比例须在 7%–10% 之间，请修改后重新提交。', '手数料率は7%〜10%の範囲で入力してください。');
+    }
     if (error.status == 401) return session.tr('登录已过期，请重新登录。', 'ログインが必要です。');
     if (error.status == 403) return session.tr('你没有此操作权限。', 'この操作の権限がありません。');
     if (error.status == 429) {

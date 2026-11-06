@@ -134,7 +134,7 @@ void main() {
 
     Future<void> submit([Map<String, String> values = const {}]) async {
       for (final item in values.entries) {
-        if (item.key == 'decision') {
+        if (item.key == 'decision' || item.key == 'appraisal_status') {
           await tester.tap(find.byType(DropdownButtonFormField<String>).first);
           await settle();
           await tap(labels.status(app.session, item.value));
@@ -317,6 +317,85 @@ void main() {
         await settle();
         expect(tester.takeException(), isNull);
       }
+      final highListing = id(await post(seller, '/listings/new', {
+        'category_slug': 'watch',
+        'title_ja': 'DEMO high value review',
+        'price': 100000,
+        'region': 'sakado'
+      }));
+      final pendingBuy = await app.session.client.post(
+          app.session.uri('/listings/$highListing/buy'),
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer ${buyer.token}'
+          },
+          body: '{}');
+      expect(pendingBuy.statusCode, 409);
+      final queue = await app.session.get('/admin/high-value');
+      final review = (queue['items'] as List)
+          .firstWhere((r) => r['listing_id'] == highListing);
+      await tester.pumpWidget(MaterialApp(
+          key: UniqueKey(),
+          theme: yunoTheme(),
+          home: const app.AdminSection(
+              section: 'high-value', title: 'DEMO review')));
+      await settle();
+      final card = find.ancestor(
+          of: find.text(' #${review['id']}'), matching: find.byType(Card));
+      final reviewButton =
+          find.descendant(of: card, matching: find.text('人工审核'));
+      await reveal(reviewButton);
+      await tester.tap(reviewButton);
+      await settle();
+      await submit({
+        'appraisal_status': 'approved',
+        'identity_verified': '1',
+        'appraisal_note': 'DEMO human fixture review'
+      });
+      final reviewed =
+          (await app.session.get('/listings/$highListing'))['review'];
+      expect(reviewed['appraisal_status'], 'approved');
+      expect(reviewed['identity_verified'], 1);
+      await tester.pumpWidget(MaterialApp(
+          key: UniqueKey(),
+          theme: yunoTheme(),
+          home: const app.AdminSection(
+              section: 'expenses', title: 'DEMO expenses')));
+      await settle();
+      await tap('登记费用');
+      await submit(
+          {'kind': 'DEMO test', 'amount': '1200', 'note': 'DEMO expense $run'});
+      expect(
+          ((await app.session.get('/admin/expenses'))['items'] as List).any(
+              (e) => e['note'] == 'DEMO expense $run' && e['amount'] == 1200),
+          isTrue);
+      final settings =
+          (await app.session.get('/admin/settings'))['items'] as List;
+      final original = {
+        for (final row in settings) row['key'] as String: '${row['value']}'
+      };
+      await tester.pumpWidget(MaterialApp(
+          key: UniqueKey(),
+          theme: yunoTheme(),
+          home: const app.AdminSection(
+              section: 'settings', title: 'DEMO settings')));
+      await settle();
+      await tap('保存参数');
+      await submit({
+        'commission_rate': '0.50',
+        'regions': original['regions']!,
+        'buyback_params': original['buyback_params']!
+      });
+      expect(find.text('佣金比例须在 7%–10% 之间，请修改后重新提交。'), findsOneWidget);
+      expect((await app.session.get('/config'))['commission_rate'],
+          double.parse(original['commission_rate']!));
+      await submit({'commission_rate': '0.08'});
+      expect((await app.session.get('/config'))['commission_rate'], 0.08);
+      await post(admin, '/admin/settings', {
+        for (final key in ['commission_rate', 'regions', 'buyback_params'])
+          key: original[key]
+      });
+      stage('high_value_expenses_settings_rejection_and_save');
       await app.session.signOut();
       expect(await app.session.storage.read(key: 'session'), isNull);
       stage('passed');

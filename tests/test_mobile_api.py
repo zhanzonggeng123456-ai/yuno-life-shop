@@ -181,6 +181,16 @@ def test_invalid_json_and_business_rejection_are_json():
     assert u.client.get('/api/v1/listings/999999',headers=u.headers).headers['content-type'].startswith('application/json')
 
 
+def test_settings_range_rejection_is_not_reported_as_success():
+    admin = Mobile('settings-admin@test.jp', 'admin')
+    current = {r['key']: r['value'] for r in admin.get('/admin/settings')['items']}
+    payload = {k: current[k] for k in ('commission_rate', 'regions', 'buyback_params')}
+    payload['commission_rate'] = '0.50'
+    result = admin.post('/admin/settings', payload, expected=409)
+    assert result['error'] == 'rate_out_of_range'
+    assert admin.get('/config')['commission_rate'] == float(current['commission_rate'])
+
+
 def test_public_market_overview_excludes_demo_unpaid_and_keeps_periods_separate():
     s=Mobile('overview-s@test.jp');b=Mobile('overview-b@test.jp')
     lid=s.listing(6000)
