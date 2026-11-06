@@ -9,15 +9,15 @@ class TrialNotice extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Container(
         width: double.infinity,
-        margin: const EdgeInsets.only(bottom: 20),
-        padding: const EdgeInsets.all(15),
+        margin: const EdgeInsets.only(bottom: 16),
+        padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
             color: Colors.white, border: Border.all(color: YunoColors.line)),
         child: Text(
             api.tr(
                 '试用版：可直接浏览市场、行情与商品详情。注册、发布与 AI 功能连接平台；发布前请核对识别、鉴定与估价结果。支付与配送均为模拟，不产生真实扣款。',
                 '試用版：市場・相場・商品詳細を閲覧できます。登録・出品・AI機能はサーバーに接続します。結果を確認してから公開してください。決済・配送は模擬で、実際の請求はありません。'),
-            style: const TextStyle(fontSize: 12, height: 1.8)),
+            style: const TextStyle(fontSize: 12, height: 1.65)),
       );
 }
 
@@ -220,11 +220,8 @@ class _MarketHomeState extends State<MarketHome> {
                                         fontSize: 11, color: YunoColors.muted)),
                                 const SizedBox(height: 5),
                                 Text(yen(summary['gmv'] ?? 0),
-                                    style: const TextStyle(
-                                        fontFamily: 'Georgia',
-                                        fontSize: 36,
-                                        fontWeight: FontWeight.w600,
-                                        letterSpacing: -1)),
+                                    key: const ValueKey('overview-amount'),
+                                    style: overviewAmountStyle),
                                 const SizedBox(height: 9),
                                 Wrap(
                                     spacing: 8,
@@ -252,7 +249,7 @@ class _MarketHomeState extends State<MarketHome> {
                                                   : '${summary['change_pct']}%',
                                               style: const TextStyle(
                                                   fontSize: 10,
-                                                  fontWeight: FontWeight.w700,
+                                                  fontWeight: FontWeight.w500,
                                                   color: YunoColors.muted))),
                                     ]),
                                 const SizedBox(height: 12),
@@ -275,13 +272,28 @@ class _MarketHomeState extends State<MarketHome> {
                                         '取引 ${summary['paid_orders'] ?? 0} 件（模擬決済・DEMO除外）'),
                                     style: const TextStyle(
                                         fontSize: 11, color: YunoColors.muted)),
-                                const Divider(height: 26),
+                                const Divider(height: 22),
                                 SizedBox(
-                                    height: 84,
+                                    height: 64,
                                     width: double.infinity,
-                                    child: CustomPaint(
-                                        painter: VolumeLine(List<Json>.from(
-                                            summary['volume_curve'] ?? [])))),
+                                    child:
+                                        Stack(fit: StackFit.expand, children: [
+                                      CustomPaint(
+                                          painter: VolumeLine(List<Json>.from(
+                                              summary['volume_curve'] ?? []))),
+                                      if (!(summary['volume_curve'] as List? ??
+                                              [])
+                                          .any((week) =>
+                                              (week['volume'] as num? ?? 0) >
+                                              0))
+                                        Center(
+                                            child: Text(
+                                                api.tr(
+                                                    '暂无成交记录', '取引履歴はまだありません'),
+                                                style: const TextStyle(
+                                                    fontSize: 11,
+                                                    color: YunoColors.muted))),
+                                    ])),
                                 const SizedBox(height: 6),
                                 Align(
                                     alignment: Alignment.centerRight,
@@ -291,7 +303,7 @@ class _MarketHomeState extends State<MarketHome> {
                                         style: const TextStyle(
                                             fontSize: 10,
                                             color: YunoColors.muted))),
-                                const Divider(height: 24),
+                                const Divider(height: 20),
                                 Row(children: [
                                   Expanded(
                                       child: Text(
@@ -309,7 +321,7 @@ class _MarketHomeState extends State<MarketHome> {
                                                   TextDecoration.underline))),
                                 ]),
                               ]))),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 16),
                   Row(children: [
                     Expanded(child: section(api.tr('商品行情', '商品相場'))),
                     Container(
@@ -579,7 +591,9 @@ class VolumeLine extends CustomPainter {
     canvas.drawPath(
         path,
         Paint()
-          ..color = const Color(0xff347957)
+          ..color = values.any((value) => value > 0)
+              ? const Color(0xff347957)
+              : YunoColors.line
           ..strokeWidth = 2
           ..style = PaintingStyle.stroke);
   }
@@ -599,36 +613,42 @@ Widget marketRankBoard(
       child: Column(children: [
         Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-            child: Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                alignment: WrapAlignment.spaceBetween,
-                crossAxisAlignment: WrapCrossAlignment.center,
-                children: [
-                  Text(up ? api.tr('涨幅榜', '上昇ランキング') : api.tr('跌幅榜', '下落ランキング'),
-                      style: const TextStyle(
-                          fontSize: 14, fontWeight: FontWeight.w700)),
-                  Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 7, vertical: 3),
-                      decoration: BoxDecoration(
-                          color: up
-                              ? const Color(0xffe2f1e8)
-                              : const Color(0xfff9e4e2),
-                          borderRadius: BorderRadius.circular(3)),
-                      child: Text(
-                          api.tr('${up ? '上涨' : '下跌'} ${items.length} 件',
-                              '${up ? '上昇' : '下落'} ${items.length} 点'),
-                          style: TextStyle(
-                              fontSize: 10,
-                              fontWeight: FontWeight.w700,
-                              color: up
-                                  ? const Color(0xff267955)
-                                  : const Color(0xffb52f33)))),
-                  Text(api.tr('${up ? '涨幅' : '跌幅'}从大到小', '変動率順'),
-                      style: const TextStyle(
-                          fontSize: 10, color: YunoColors.muted)),
-                ])),
+            child: Row(children: [
+              Expanded(
+                  child: Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                    Text(
+                        up
+                            ? api.tr('涨幅榜', '上昇ランキング')
+                            : api.tr('跌幅榜', '下落ランキング'),
+                        style: const TextStyle(
+                            fontSize: 14, fontWeight: FontWeight.w700)),
+                    Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 7, vertical: 3),
+                        decoration: BoxDecoration(
+                            color: up
+                                ? const Color(0xffe2f1e8)
+                                : const Color(0xfff9e4e2),
+                            borderRadius: BorderRadius.circular(3)),
+                        child: Text(
+                            api.tr('${up ? '上涨' : '下跌'} ${items.length} 件',
+                                '${up ? '上昇' : '下落'} ${items.length} 点'),
+                            style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w700,
+                                color: up
+                                    ? const Color(0xff267955)
+                                    : const Color(0xffb52f33)))),
+                  ])),
+              const SizedBox(width: 8),
+              Text(api.tr('${up ? '涨幅' : '跌幅'}从大到小', '変動率順'),
+                  style:
+                      const TextStyle(fontSize: 10, color: YunoColors.muted)),
+            ])),
         const Divider(height: 1),
         if (items.isEmpty)
           Padding(
@@ -656,7 +676,7 @@ Widget marketRankBoard(
                         width: 20,
                         child: Text('${indexed.$1 + 1}',
                             style: const TextStyle(
-                                fontFamily: 'Georgia', fontSize: 16))),
+                                fontFamily: 'YunoSerif', fontSize: 16))),
                     Expanded(
                         child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,

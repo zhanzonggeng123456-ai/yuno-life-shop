@@ -140,6 +140,7 @@ Widget heading(String title, {String? subtitle}) => Padding(
             title,
             style: const TextStyle(
                 fontSize: 19,
+                height: 1.3,
                 fontFamily: 'YunoSerif',
                 fontFamilyFallback: ['Songti SC', 'serif'],
                 fontWeight: FontWeight.w700),
@@ -261,7 +262,9 @@ class _HomeShellState extends State<HomeShell> {
                         isScrollControlled: true,
                         backgroundColor: Colors.white,
                         showDragHandle: false,
-                        shape: const RoundedRectangleBorder(),
+                        shape: const RoundedRectangleBorder(
+                            borderRadius: BorderRadius.vertical(
+                                top: Radius.circular(20))),
                         builder: (_) => TradeMenu(hostContext: context));
                   } else {
                     setState(() => tab = i);
@@ -400,7 +403,9 @@ class PageFrame extends StatelessWidget {
                         title,
                         style: const TextStyle(
                           fontSize: 20,
-                          fontWeight: FontWeight.bold,
+                          height: 1.3,
+                          fontFamily: 'YunoSerif',
+                          fontWeight: FontWeight.w600,
                         ),
                       ),
                     ),
@@ -1559,8 +1564,12 @@ class TradeMenu extends StatelessWidget {
                                 width: (c.maxWidth - 8) / 2,
                                 child: Material(
                                     color: YunoColors.paper,
-                                    shape: Border.all(color: YunoColors.line),
+                                    shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(12),
+                                        side: const BorderSide(
+                                            color: YunoColors.line)),
                                     child: InkWell(
+                                        borderRadius: BorderRadius.circular(12),
                                         onTap: entry.$3,
                                         child: Container(
                                             constraints: const BoxConstraints(
@@ -1878,8 +1887,6 @@ class ProfilePage extends StatelessWidget {
           heading(session.tr('个人中心', 'マイページ')),
           const Divider(height: 12, color: YunoColors.ink),
           Card(
-              shape: const RoundedRectangleBorder(
-                  side: BorderSide(color: YunoColors.line)),
               child: Padding(
                   padding: const EdgeInsets.all(16),
                   child: Row(children: [
@@ -1910,8 +1917,6 @@ class ProfilePage extends StatelessWidget {
             Padding(
                 padding: const EdgeInsets.only(bottom: 12),
                 child: FilledButton(
-                    style: FilledButton.styleFrom(
-                        backgroundColor: const Color(0xffbd2c2c)),
                     onPressed: () => open(context, const AuthPage()),
                     child: Text(session.tr('登录 / 注册', 'ログイン・登録')))),
           Wrap(spacing: 6, runSpacing: 6, children: [

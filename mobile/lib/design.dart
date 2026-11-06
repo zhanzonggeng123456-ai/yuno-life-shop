@@ -1,5 +1,16 @@
 import 'package:flutter/material.dart';
 
+// One bundled face for the currency symbol and lining digits. Georgia's
+// old-style zero sits below the currency cap height on iOS.
+const overviewAmountStyle = TextStyle(
+  fontFamily: 'YunoSerif',
+  fontSize: 34,
+  height: 1.16,
+  fontWeight: FontWeight.w500,
+  letterSpacing: -0.4,
+  fontFeatures: [FontFeature.liningFigures(), FontFeature.tabularFigures()],
+);
+
 abstract final class YunoColors {
   static const primary = Color(0xff24304b);
   static const ink = Color(0xff25314a);
@@ -11,7 +22,7 @@ abstract final class YunoColors {
 
 ThemeData yunoTheme() {
   final border = OutlineInputBorder(
-    borderRadius: BorderRadius.zero,
+    borderRadius: BorderRadius.circular(8),
     borderSide: const BorderSide(color: YunoColors.line),
   );
   return ThemeData(
@@ -25,8 +36,8 @@ ThemeData yunoTheme() {
     ),
     scaffoldBackgroundColor: YunoColors.paper,
     textTheme: const TextTheme(
-      bodyLarge: TextStyle(fontSize: 15, height: 1.5),
-      bodyMedium: TextStyle(fontSize: 14, height: 1.5),
+      bodyLarge: TextStyle(fontSize: 15, height: 1.45),
+      bodyMedium: TextStyle(fontSize: 14, height: 1.45),
       titleMedium: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
     ),
     inputDecorationTheme: InputDecorationTheme(
@@ -51,7 +62,7 @@ ThemeData yunoTheme() {
     filledButtonTheme: FilledButtonThemeData(
       style: FilledButton.styleFrom(
         minimumSize: const Size(0, 48),
-        shape: const RoundedRectangleBorder(),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
         textStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
       ),
     ),
@@ -59,7 +70,7 @@ ThemeData yunoTheme() {
       style: OutlinedButton.styleFrom(
         minimumSize: const Size(0, 46),
         side: const BorderSide(color: YunoColors.line),
-        shape: const RoundedRectangleBorder(),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
       ),
     ),
     listTileTheme: const ListTileThemeData(
@@ -74,7 +85,7 @@ ThemeData yunoTheme() {
       surfaceTintColor: Colors.transparent,
       indicatorColor: Colors.transparent,
       labelTextStyle: WidgetStateProperty.resolveWith((states) => TextStyle(
-            fontSize: 10,
+            fontSize: 11,
             color: states.contains(WidgetState.selected)
                 ? YunoColors.primary
                 : YunoColors.muted,

@@ -301,8 +301,11 @@ void main() {
     expect(find.text('市场'), findsOneWidget);
     await tester.tap(find.byType(NavigationDestination).at(4));
     await tester.pumpAndSettle();
-    await tester.scrollUntilVisible(find.text('日本語'), 250);
-    await tester.tap(find.text('日本語'));
+    final japanese = find.widgetWithText(ChoiceChip, '日本語');
+    await tester.scrollUntilVisible(japanese, 250);
+    await tester.ensureVisible(japanese);
+    await tester.pumpAndSettle();
+    await tester.tap(japanese);
     await tester.pumpAndSettle();
     expect(find.text('市場'), findsOneWidget);
     expect(find.text('市场'), findsNothing);
