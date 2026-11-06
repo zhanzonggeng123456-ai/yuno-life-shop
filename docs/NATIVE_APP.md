@@ -132,7 +132,7 @@ flutter drive --profile --keep-app-running --no-uninstall-first \
 
 ## 当前界面版本
 
-当前正常试用包为 0.4.3（8），修复后台佣金越界与拍卖拒绝状态误报成功，实测见 [验收记录](NATIVE_ACCEPTANCE.md)。
+当前正常试用包为 0.4.4（9），进一步修复加载页与市场页异步刷新在 debug 模式返回 Future 导致的异常，实测见 [验收记录](NATIVE_ACCEPTANCE.md)。
 界面沿用按用户给定 Muse 参考及手机照片调整的 0.4.1 排版，排版说明见
 [NATIVE_UI_0_4_1.md](NATIVE_UI_0_4_1.md)。`GET /me` 额外返回当前用户的 `following` 商品列表；
 订单读取中的 `listing` 字段包含商品标题与照片，便于原生订单卡片展示。以上均为读取扩展。
@@ -153,7 +153,17 @@ YUNO_ANDROID_NDK_VERSION=27.1.12297006 flutter build apk --debug --no-pub \
 
 此选项仅用于已验证的本地验收工具链，Gradle 统一配置本项目和 Android 插件，开启 NDK 27 的 flexible page sizes。
 默认仍为 NDK 28.2；不改共享 SDK 或依赖源码。16 KB 支持依据见 [Android 官方说明](https://developer.android.com/guide/practices/page-sizes)。
-当前 APK 的 ZIP/ELF 对齐与签名均已检查；独立模拟器仍要求约 7.2 GB 可用空间，运行未通过。
+当前 APK `outputs/yuno-life-0.4.4-arm64-debug.apk` 的 ZIP 对齐与签名已检查，原生库与此前 ELF 对齐通过的版本哈希一致。
+此前自动创建分区路径要求约 7.2 GB；现已在独立 2 GiB 稀疏盘的 API 36 模拟器完成安装、启动及四组集成测试，实测系统页大小 16384。
+
+在项目根运行 `python3 mobile/tool/prepare_android_acceptance.py --run-id 新数字编号`，使用已有 SDK 镜像创建项目专属测试盘，再执行打印的启动命令。
+磁盘需至少 2 GiB 余量；运行期间持续检查余量，空间不足时只停止本轮专属模拟器。不得使用 Nino AVD。
+先安装已有正常 APK，再于 `mobile/` 执行官方 `flutter attach -d 设备序列号 --debug -t integration_test/android_attach_test.dart`，
+同时传入 `--dart-define=API_BASE_URL=http://10.0.2.2:8003`、新数字 `ACCEPTANCE_RUN_ID` 和 `ACCEPTANCE_SCENARIO`（默认主业务，或 roles/closure/settlement）。
+隔离 8003 和受限角色 Host 需按前述流程先启动。attach 后用 R 热重启，再用其 DDS URL 执行
+`flutter drive --no-pub --driver=test_driver/native_driver.dart --use-existing-app=DDS地址 -d 设备序列号`。
+入口注册真实 Android JNI 存储插件；媒体和文字仍为测试 fixture，不证明硬件相机或系统键盘。
+结束后 detach、恢复正常 APK、停止隔离服务及本轮模拟器，保留证据后可删除本轮测试盘。
 
 `integration_test/settlement_flow_test.dart` 补验到期结算、重复结算、流拍、预警确认与调价批准/驳回。
 启动相同的隔离角色工具时加 `--lifecycle-fixtures`；仅本轮精确卖家邮箱和指定测试商品会被准备为老库存/过期拍卖。

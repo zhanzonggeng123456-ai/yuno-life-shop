@@ -10,13 +10,13 @@
 | JSON API 集成 | 新增 11 项多流程集成测试；共 108 项后端测试通过（包含概览统计验证） |
 | 覆盖流程 | token 注册/登录/过期/退出、权限隔离、直购/支付幂等/完成/评价/退款、议价/消息、10 图/封面/替换/草稿/任务/确认发布、拍卖、买断、自营、配送、三项服务、各后台读取 |
 | Flutter 静态检查 | 最终复验 `No issues found` |
-| Flutter 组件测试 | 13 项通过：实际字体的零/大金额与主页面检查，加上原有 10 项，加上 320 宽/1.5 倍字体中日文布局、相册剩余数量及满额限制；静态检查无问题 |
-| iOS 编译 | 清理空间后 Profile 与当前正常 Release 均完整构建成功；当前 0.4.3 Release 44.7 MB（含离线衬线字体） |
+| Flutter 组件测试 | 15 项通过：新增通用加载页和市场页重试/刷新回归，其余 13 项保留：实际字体的零/大金额与主页面检查，加上原有 10 项，加上 320 宽/1.5 倍字体中日文布局、相册剩余数量及满额限制；静态检查无问题 |
+| iOS 编译 | 清理空间后 Profile 与当前正常 Release 均完整构建成功；当前 0.4.4 Release 44.7 MB（含离线衬线字体） |
 | iOS 安装 | Release 中间产物经本机签名深度验证，可直接安装到连接的 iPhone 16e |
-| iOS 启动 | 当前 0.4.3（8）正常 Release 安装、启动及真实首页截图通过；历史 0.4.0 Profile 交易测试也已通过。历史签名/信任拒绝记录保留在下方 |
+| iOS 启动 | 当前 0.4.4（9）正常 Release 安装、启动及真实首页截图通过；历史 0.4.0 Profile 交易测试也已通过。历史签名/信任拒绝记录保留在下方 |
 | iPhone 原生流程测试 | 0.4.0 主要业务场景 68 秒通过；0.4.1 追加角色场景 67 秒通过，0.4.2 扩展为 84 秒通过，包含配送履约、退款/争议、买断入库、服务处理、原生登录/必填异常及 17 后台读取分区。媒体与文字输入为测试入口；硬件、系统权限及未执行的后台写操作不计通过，详见本记录最新小节 |
-| Android 构建 | 当前 0.4.3（8）调试包已构建、签名与 16 KB 对齐验证通过，见最新小节。历史：仅保留历史 0.1.0（2）APK；当前 0.4.0 构建尝试补齐 NDK 28.2 后磁盘只剩约 197 MiB，已主动停止本项目 Gradle 并清除新增 NDK 28，保留原有 NDK 27。新版未构建成功，未计通过 |
-| Android 运行 | 已创建独立 YunoNativeAcceptance 测试设备，不使用 Nino AVD；模拟器要求约 7.2 GiB 可用空间，当前不足，尚未启动及执行流程测试 |
+| Android 构建 | 当前 0.4.4（9）调试包已构建、签名与 16 KB 对齐验证通过，见最新小节。历史：仅保留历史 0.1.0（2）APK；当前 0.4.0 构建尝试补齐 NDK 28.2 后磁盘只剩约 197 MiB，已主动停止本项目 Gradle 并清除新增 NDK 28，保留原有 NDK 27。新版未构建成功，未计通过 |
+| Android 运行 | 独立 API 36 / 16 KB 模拟器当前 0.4.4（9）安装启动通过；四组主业务/角色/拒绝恢复/结算流程分别 65/76/33/24 秒通过。稀疏测试数据盘及复用已安装 APK 的测试方式见最新小节，物理 Android 设备未测 |
 | 相机/相册硬件 | 未验收，测试 picker 不能替代硬件测试 |
 | 商店/真实支付/真实物流 | 明确不做，界面均作模拟说明 |
 
@@ -242,3 +242,39 @@ Android 当前包、真实相机/相册/系统键盘仍无通过证据；未执�
 - Android **安装与运行仍未通过**，不能把 APK 构建或 ELF 对齐代替实际 16 KB 系统运行。日志：`android-yuno-boot-final.log`、`android-yuno-qcow2.log`。
 - 已保留 APK 与 iOS 正常 Release，清除本项目 Android/iOS 重复构建中间文件，以及本轮 Flutter 引擎版本唯一的解压转换缓存（可从已缓存原始依赖再生成），空间恢复约 2.7 GiB；未改 Nino、NDK 27、共享证书/描述文件。
 - 本轮 8003 与角色/时间 fixture 已停止，正常 8002 持续运行。iPhone 仍为正常 0.4.3（8）包。全线验收仍缺真实相机、相册、系统键盘和 Android 安装运行证据。
+
+
+### 0.4.4（9）：Android 实际运行、刷新修复与扩展验收
+
+本轮不再停留在等待 8 GiB：在项目目录内用 SDK 自带 mkfs.ext4 创建新的 **2 GiB 稀疏测试盘**，
+通过模拟器公开的 `-data` 参数启动独立 Yuno AVD。保留兼容性和空间检查，没有改共享系统镜像、SDK、Nino AVD 或真实设备。
+1 GiB 初次磁盘虽然启动了系统，但装包时空间不足；该盘是本轮可丢弃 fixture，停机后仅删除这份自建盘。
+可复现准备脚本：`mobile/tool/prepare_android_acceptance.py --run-id 新数字编号`。
+
+- 实测 Android API 36 的 `getconf PAGE_SIZE` 为 **16384**，当前 APK 安装和原生主页启动成功。
+- 为避免低空间下重新生成大型原生中间文件，先安装当前正常 debug APK，再用 Flutter 官方 attach/hot restart 装载 integration_test 入口，最后通过 `flutter drive --use-existing-app` 驱动。
+  测试入口 `android_attach_test.dart` 显式注册真实 SharedPreferences Android JNI 插件；没有替换真实 Keystore/平台存储。
+  最初未注册该 JNI 入口而抛 MissingPluginException 的日志保留，属于热重启测试入口初始化问题，不是正常 APK 启动失败。
+- 进一步复现产品代码问题：LoadView.reload 和 MarketHome.reload 在 setState 的箭头回调中赋值 Future，导致 debug 模式抛出“setState() callback argument returned a Future”。
+  改为先取 Future、在同步块内更新状态，并在已卸载时直接返回，防止异步操作返回后刷新已离开的页面。
+- **15 项 Flutter 检查通过**（原 13 项加通用加载页和市场页刷新回归），静态检查无问题。
+  新回归覆盖错误页重试、操作后刷新和卸载后旧回调不再次请求。证据 `refresh-widget-passed.log`、`refresh-analyze.log`。
+- Android 0.4.4 正常 APK 构建成功，ZIP 16 KB 对齐、签名通过；包内原生库哈希与已检查 ELF 对齐的 0.4.3 完全一致，见 `android-0.4.4-native-compare.log`。
+  当前安装包 `outputs/yuno-life-0.4.4-arm64-debug.apk`；旧 0.1.0 和 0.4.3 生成包已被当前包替代，历史日志保留。
+- iOS 0.4.4（9）正常 Release 44.7 MB 构建、签名验证、安装、启动与设备版本复核通过；[实际 iPhone 首页](previews/iphone-market-0.4.4.png)。最新正常恢复包仍为 mobile/build/ios/Release-iphoneos/Runner.app。
+- Android 主业务完整场景 **65 秒通过**：注册、10 图、AI、封面/删除/补图/重拍/替换、确认上架、退出与语言；收藏/聊天/直购/模拟付款/配送预约/完成/评价/议价接受还价/拍卖出价/买断/三项服务。证据 `android-0.4.4-native-flow.log`。
+- Android 角色完整场景 **76 秒通过**：错误登录恢复、必填校验、403、配送履约、退款批准/终态、争议裁决、买断审核/报价/原生日期时间预约/验货/模拟付款入库、服务处理、17 后台读取、高价值审核、费用、佣金越界拒绝和合法保存。证据 `android-0.4.4-roles-flow.log`。
+- 测试均使用独立 data/acceptance-android-* 与 8003，角色准备和后端状态检查沿用前述受限 fixture；正常 8002 数据未参与测试。
+  媒体仍为合法测试 PNG、输入仍为测试通道，不计真实相机/相册/系统键盘。Android 为模拟器，不计物理 Android 真机。
+- 曾因运行组件测试的临时占用触发磁盘保护，自动只停止本轮 Yuno 模拟器；该次未完成测试没有记为通过。
+  后续先完成构建、清理可再生成中间文件再顺序执行设备测试；有校验目标命令和 PID 的余量保护，Nino 未动。
+- 原 Mac iPhone 镜像亦实际尝试，提示 iCloud 已退出登录。没有擅自登录 Apple 账号或升级手机；真实 iPhone 相机、相册和系统键盘仍待实际操作结果。
+
+- Android 拒绝恢复与后台写操作 **33 秒通过**：保证金、低出价和代理上限拒绝均保留表单；修正后出价、一口价取消；后台角色修改还原、商品上下架和扫描审计。证据 `android-0.4.4-closure-flow.log`。
+- Android 结算与决策 **24 秒通过**：成交与流拍、重复结算只产生一单、模拟付款完成、跳价预警确认、真实生成两条调价建议并分别批准/驳回，核对价格与审计。证据 `android-0.4.4-settlement-flow.log`。拍卖到期与老库存由受限 fixture 准备，不是真实时间流逝。
+- 四组通过后重新安装正常 APK，冷启动成功，设备读回 **versionName=0.4.4 / versionCode=9 / PAGE_SIZE=16384**；[正常 Android 首页截图](previews/android-market-0.4.4.png) 已人工核对。
+  证据 `android-0.4.4-restored-install.log`、`android-0.4.4-restored-launch.log`、`android-0.4.4-version.txt`、`android-0.4.4-restored-page-size.log`。
+- 隔离 8003、角色 Host、本轮 Yuno 模拟器和磁盘保护进程均已停止；正常 8002 保持运行。停机后仅删除本轮可丢弃 userdata 测试盘，恢复约 2.7 GiB，当前 APK、iPhone Release、截图和日志保留。Android 模拟器安装数据因此不保留，后续可用脚本新建独立盘并安装现有 APK。
+- 最终静态检查 `refresh-analyze-final.log` 无问题。后端本轮未改，保留此前 108 项通过证据；此前各 iPhone 集成场景并未在 0.4.4 重跑，不扩大其版本覆盖。
+
+**当前结论**：Android 模拟器安装运行和四组业务缺口已补齐。全线验收仍待真实 iPhone 相机、相册、系统键盘操作结果，不能把测试 PNG、测试输入或用户“允许”记为通过；Android 物理真机也无实测证据。GitHub 写权限此前拒绝，本轮仅本地提交。

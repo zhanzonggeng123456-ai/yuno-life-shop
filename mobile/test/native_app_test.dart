@@ -11,6 +11,66 @@ import 'package:yuno_life/design.dart';
 import 'package:yuno_life/market_home.dart';
 
 void main() {
+  testWidgets(
+      'retry and command reload replace futures without setState assertions',
+      (tester) async {
+    var calls = 0;
+    late VoidCallback reload;
+    await tester.pumpWidget(MaterialApp(
+        home: LoadView(
+      load: () async {
+        calls++;
+        if (calls == 1) throw Exception('offline');
+        return {'count': calls};
+      },
+      builder: (context, data, callback) {
+        reload = callback;
+        return TextButton(
+            onPressed: callback, child: Text('count ${data['count']}'));
+      },
+    )));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('重试'));
+    await tester.pumpAndSettle();
+    expect(find.text('count 2'), findsOneWidget);
+    await tester.tap(find.text('count 2'));
+    await tester.pumpAndSettle();
+    expect(find.text('count 3'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox());
+    reload();
+    expect(calls, 3);
+    expect(tester.takeException(), isNull);
+  });
+  testWidgets('market retry replaces a failed load without setState assertions',
+      (tester) async {
+    var markets = 0;
+    session.client = MockClient((request) async {
+      if (request.url.path.endsWith('/market') && ++markets == 1) {
+        return http.Response('{"error":"offline"}', 503);
+      }
+      return http.Response(
+          '{"items":[],"moves":{},"categories":[],"basis":{}}', 200,
+          headers: {'content-type': 'application/json'});
+    });
+    await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+            body: MarketHome(
+                api: session,
+                onTrends: () {},
+                onBrowse: () {},
+                onPublish: () {},
+                onListing: (_) {},
+                onAuction: (_) {},
+                card: (_) => const SizedBox(),
+                onFavorite: (_) async {}))));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('连接失败，重试'));
+    await tester.pumpAndSettle();
+    expect(markets, 2);
+    expect(find.text('平台总成交额（模拟支付）· 坂户市'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
     FlutterSecureStorage.setMockInitialValues({});

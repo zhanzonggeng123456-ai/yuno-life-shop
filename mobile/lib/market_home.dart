@@ -67,7 +67,11 @@ class _MarketHomeState extends State<MarketHome> {
         api.get('/auctions'),
       ]);
   Future<void> reload() async {
-    setState(() => data = load());
+    if (!mounted) return;
+    final next = load();
+    setState(() {
+      data = next;
+    });
     await data;
   }
 

@@ -457,7 +457,11 @@ class _LoadViewState extends State<LoadView> {
   }
 
   void reload() {
-    setState(() => value = widget.load());
+    if (!mounted) return;
+    final next = widget.load();
+    setState(() {
+      value = next;
+    });
   }
 
   @override
