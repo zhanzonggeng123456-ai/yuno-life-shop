@@ -163,6 +163,26 @@ String errorText(Object error) {
   return tx('连接中断，请稍后重试', '接続が中断されました。再試行してください');
 }
 
+String displayValue(String key, dynamic value) {
+  if (value is bool) return value ? tx('是', 'はい') : tx('否', 'いいえ');
+  if (key.contains('confidence') && ['low', 'medium', 'high'].contains(value)) {
+    return {
+      'low': tx('低', '低'),
+      'medium': tx('中', '中'),
+      'high': tx('高', '高'),
+    }[value]!;
+  }
+  if (key == 'category_slug') {
+    final matches = (appState.config['categories'] as List? ?? []).where(
+      (c) => c['slug'] == value,
+    );
+    if (matches.isNotEmpty) return matches.first['name_${appState.language}'];
+  }
+  return words.containsKey(value.toString())
+      ? label(value.toString())
+      : value.toString();
+}
+
 Widget emptyState() => Padding(
   padding: const EdgeInsets.all(28),
   child: Column(
@@ -247,7 +267,7 @@ Widget infoData(dynamic data, {int depth = 0}) {
                         style: const TextStyle(color: Color(0xff66716a)),
                       ),
                       Text(
-                        label(entry.value.toString()),
+                        displayValue(entry.key.toString(), entry.value),
                         style: const TextStyle(fontWeight: FontWeight.w500),
                       ),
                     ],
@@ -268,7 +288,11 @@ Widget infoData(dynamic data, {int depth = 0}) {
       ],
     );
   }
-  return Text(label(data.toString()));
+  return Text(
+    words.containsKey(data.toString())
+        ? label(data.toString())
+        : data.toString(),
+  );
 }
 
 class ProductPhotos extends StatelessWidget {

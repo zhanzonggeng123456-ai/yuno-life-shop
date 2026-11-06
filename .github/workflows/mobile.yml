@@ -6,6 +6,9 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
+concurrency:
+  group: native-mobile-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
   android:
     runs-on: ubuntu-latest
@@ -24,7 +27,9 @@ jobs:
         run: |
           python3 -m venv .venv
           .venv/bin/pip install -r requirements.txt
-          YUNO_DB_PATH="$RUNNER_TEMP/mobile-qa/yuno.db" +          YUNO_UPLOAD_DIR="$RUNNER_TEMP/mobile-qa/uploads" +          nohup .venv/bin/python -m uvicorn app.main:app --host 0.0.0.0 --port 8765 +            > "$RUNNER_TEMP/yuno-server.log" 2>&1 &
+          export YUNO_DB_PATH="$RUNNER_TEMP/mobile-qa/yuno.db"
+          export YUNO_UPLOAD_DIR="$RUNNER_TEMP/mobile-qa/uploads"
+          nohup .venv/bin/python -m uvicorn app.main:app --host 0.0.0.0 --port 8765 > "$RUNNER_TEMP/yuno-server.log" 2>&1 &
           for i in $(seq 1 30); do
             curl --fail --silent http://127.0.0.1:8765/api/v1/config > /dev/null && break
             sleep 1
@@ -69,7 +74,9 @@ jobs:
           python3 -m venv .venv
           .venv/bin/pip install -r requirements.txt
           .venv/bin/python -m pytest tests -q
-          YUNO_DB_PATH="$RUNNER_TEMP/mobile-qa/yuno.db" +          YUNO_UPLOAD_DIR="$RUNNER_TEMP/mobile-qa/uploads" +          nohup .venv/bin/python -m uvicorn app.main:app --host 127.0.0.1 --port 8765 +            > "$RUNNER_TEMP/yuno-server.log" 2>&1 &
+          export YUNO_DB_PATH="$RUNNER_TEMP/mobile-qa/yuno.db"
+          export YUNO_UPLOAD_DIR="$RUNNER_TEMP/mobile-qa/uploads"
+          nohup .venv/bin/python -m uvicorn app.main:app --host 127.0.0.1 --port 8765 > "$RUNNER_TEMP/yuno-server.log" 2>&1 &
           for i in $(seq 1 30); do
             curl --fail --silent http://127.0.0.1:8765/api/v1/config > /dev/null && break
             sleep 1
