@@ -46,7 +46,10 @@ void main() {
       await tester.enterText(find.byType(TextFormField).at(1), 'QA 出品者');
       await tester.enterText(find.byType(TextFormField).at(2), sellerPassword);
       final submit = find.widgetWithText(FilledButton, '注册');
+      FocusManager.instance.primaryFocus?.unfocus();
+      await settle(tester);
       await tester.ensureVisible(submit);
+      await tester.pumpAndSettle();
       await tester.tap(submit);
       await settle(tester);
       expect(find.byType(ActionForm), findsNothing);
