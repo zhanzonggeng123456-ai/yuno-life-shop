@@ -58,7 +58,17 @@ flutter drive --driver=test_driver/integration_test.dart --target=integration_te
 
 Android 自动化测试时通过环境变量
 `YUNO_QA=true` 使用独立包名 `com.yunolife.shop.qa`。
-这让测试登录信息与普通试用包分开存放。
+这让测试登录信息与普通试用包分开存放。Flutter 驱动结束会卸载测试应用。
+在已装试用包的实体手机上，务必先构建验收 APK，再从该二进制启动，
+避免 Flutter 复用旧 APK 元数据时按旧包名清理：
+
+```sh
+YUNO_QA=true flutter build apk --profile --target=integration_test/app_test.dart --target-platform android-arm64 --dart-define=YUNO_SERVER=http://验收服务器IP:8765
+flutter drive --profile --use-application-binary=build/app/outputs/flutter-apk/app-profile.apk --driver=test_driver/integration_test.dart --target=integration_test/app_test.dart -d 设备ID
+```
+
+上面的环境变量语法适用于 sh；PowerShell 使用 `$env:YUNO_QA="true"`。
+测试只能连接隔离数据库，不能连接正式用户数据。
 
 磁盘紧张时可在真机上使用 profile 驱动方式：
 
