@@ -54,3 +54,18 @@ def test_cloud_storage_preserves_existing_database_and_photos(tmp_path, monkeypa
     configure_storage()
     assert database.read_bytes() == b"existing database"
     assert photo.read_bytes() == b"existing photo"
+
+
+def test_fresh_process_initializes_database_only_after_storage_configuration(tmp_path):
+    import os
+    import subprocess
+    import sys
+    environment = os.environ.copy()
+    for key in ('YUNO_DB_PATH', 'YUNO_UPLOAD_DIR', 'TURSO_DATABASE_URL', 'TURSO_AUTH_TOKEN', 'YUNO_STORAGE_MODE'):
+        environment.pop(key, None)
+    environment.update(YUNO_DATA_DIR=str(tmp_path), YUNO_REQUIRE_PERSISTENT_VOLUME='0')
+    code = ('from deploy.serve import configure_storage; root=configure_storage(); '
+            'from app import db; assert db.DB_PATH == root/"db"/"yuno.db"; '
+            'assert db.UPLOAD_DIR == root/"uploads"; db.init_db(); '
+            'assert (root/"db"/"yuno.db").is_file()')
+    subprocess.run([sys.executable, '-c', code], env=environment, check=True, timeout=20)

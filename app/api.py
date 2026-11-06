@@ -298,7 +298,7 @@ async def draft_photo_replace(request: Request, did: int, idx: int,
         photos, _ = legacy()._draft_photos(draft)
         if idx < 0 or idx >= len(photos):
             raise HTTPException(400, "bad_photo_index")
-        legacy()._save_upload_blobs(blobs)
+        legacy()._save_upload_blobs(blobs, c)
         photos[idx] = blobs[0][0]
         legacy()._set_draft_photos(c, did, photos, draft)
         c.execute("UPDATE oneclick_drafts SET status='uploaded' WHERE id=?", (did,))

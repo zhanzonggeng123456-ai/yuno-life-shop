@@ -8,7 +8,9 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /srv/yuno
 COPY requirements.txt ./
+COPY requirements-cloud.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir -r requirements-cloud.txt
 COPY app ./app
 COPY deploy ./deploy
 

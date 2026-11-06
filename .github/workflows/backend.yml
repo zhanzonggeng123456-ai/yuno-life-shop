@@ -20,7 +20,12 @@ jobs:
           python3 -m venv .venv
           .venv/bin/pip install -r requirements.txt
           .venv/bin/pip install -r requirements-backup.txt
+          .venv/bin/pip install -r requirements-cloud.txt
           .venv/bin/python -m pytest tests -q
+      - name: Regression with official libSQL driver on disposable local data
+        env:
+          YUNO_DB_DRIVER: libsql
+        run: .venv/bin/python -m pytest tests -q
       - name: Build isolated YUNO container
         run: docker build --tag yuno-backend-ci .
       - name: Refuse an ephemeral deployment

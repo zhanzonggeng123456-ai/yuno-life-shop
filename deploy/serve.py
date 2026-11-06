@@ -5,6 +5,25 @@ from pathlib import Path
 
 
 def configure_storage():
+    from app.remote_db import configuration
+    remote_url, _ = configuration()
+    photo_mode = os.environ.get("YUNO_PHOTO_STORAGE", "files")
+    if photo_mode not in ("files", "database"):
+        raise RuntimeError("Invalid YUNO_PHOTO_STORAGE")
+    if os.environ.get("YUNO_STORAGE_MODE", "volume") == "remote":
+        if not remote_url or photo_mode != "database":
+            raise RuntimeError("Remote mode requires Turso and durable database photo storage")
+        # This directory is scratch only. No customer database/photos may be
+        # written here; the two storage adapters above are mandatory.
+        scratch = Path(tempfile.gettempdir()) / "yuno-scratch"
+        scratch.mkdir(parents=True, exist_ok=True)
+        os.environ["YUNO_DB_PATH"] = str(scratch / "unused.db")
+        os.environ["YUNO_UPLOAD_DIR"] = str(scratch / "unused-uploads")
+        return scratch
+    if os.environ.get("YUNO_STORAGE_MODE", "volume") != "volume":
+        raise RuntimeError("Invalid YUNO_STORAGE_MODE")
+    if remote_url:
+        raise RuntimeError("Turso configuration requires explicit remote storage mode")
     root = Path(os.environ.get("YUNO_DATA_DIR", "/data")).resolve()
     if os.environ.get("YUNO_REQUIRE_PERSISTENT_VOLUME", "1") != "0":
         if not root.is_mount():

@@ -76,11 +76,15 @@ def create(database, uploads, output):
                               for (name,) in target.execute(
                                   "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")}
             files = {"db/yuno.db": snapshot.read_bytes()}
+            if len(files["db/yuno.db"]) > MAX_BYTES:
+                raise ValueError("Backup exceeds 256 MiB safety limit; use streaming export")
             for name in sorted(required):
                 photo = uploads / name
                 if photo.is_symlink() or not photo.is_file():
                     raise ValueError("Referenced photo missing or unsafe; backup aborted")
                 before = photo.stat()
+                if sum(map(len, files.values())) + before.st_size > MAX_BYTES:
+                    raise ValueError("Backup exceeds 256 MiB safety limit; use streaming export")
                 data = photo.read_bytes()
                 after = photo.stat()
                 if (before.st_size, before.st_mtime_ns) != (after.st_size, after.st_mtime_ns):

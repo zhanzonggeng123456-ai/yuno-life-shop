@@ -93,9 +93,10 @@ async def _read_uploads(files):
     return out
 
 
-def _save_upload_blobs(blobs):
+def _save_upload_blobs(blobs, connection=None):
+    from . import storage
     for fname, data in blobs:
-        (d.UPLOAD_DIR / fname).write_bytes(data)
+        storage.save(fname, data, connection)
 
 
 def _renumber_photos(c, listing_id):
@@ -692,7 +693,7 @@ async def listing_create(request: Request, category_slug: str = Form(...),
         if category_slug in ("watch", "coin", "antique") and price >= 100000:
             c.execute("INSERT OR IGNORE INTO hv_reviews(listing_id,created_at)"
                       " VALUES(?,?)", (lid, now_tokyo()))
-        _save_upload_blobs(blobs)
+        _save_upload_blobs(blobs, c)
         for i, (fname, _data) in enumerate(blobs):
             c.execute("INSERT INTO images(listing_id,filename,sort) VALUES(?,?,?)",
                       (lid, fname, i))
@@ -719,7 +720,7 @@ async def listing_photo_add(request: Request, lid: int,
         if cur_n + len(blobs) > MAX_PHOTOS:
             raise HTTPException(400, f"最多{MAX_PHOTOS}张照片,现有{cur_n}张,"
                                      f"新增{len(blobs)}张会超限")
-        _save_upload_blobs(blobs)
+        _save_upload_blobs(blobs, c)
         for i, (fname, _data) in enumerate(blobs):
             c.execute("INSERT INTO images(listing_id,filename,sort) VALUES(?,?,?)",
                       (lid, fname, cur_n + i))
@@ -763,9 +764,8 @@ def listing_photo_delete(request: Request, lid: int, pid: int):
         c.execute("DELETE FROM images WHERE id=?", (pid,))
         _renumber_photos(c, lid)
         c.commit()
-        p = d.UPLOAD_DIR / Path(row["filename"]).name
-        if p.exists():
-            p.unlink()
+        from . import storage
+        storage.delete(Path(row["filename"]).name)
         return redirect(f"/listings/{lid}", "photo_deleted")
     finally:
         c.close()
@@ -788,12 +788,11 @@ async def listing_photo_replace(request: Request, lid: int, pid: int,
                         (pid, lid)).fetchone()
         if not row:
             raise HTTPException(404, "photo not found")
-        _save_upload_blobs(blobs)
+        _save_upload_blobs(blobs, c)
         c.execute("UPDATE images SET filename=? WHERE id=?", (blobs[0][0], pid))
         c.commit()
-        old = d.UPLOAD_DIR / Path(row["filename"]).name
-        if old.exists():
-            old.unlink()
+        from . import storage
+        storage.delete(Path(row["filename"]).name)
         return redirect(f"/listings/{lid}", "photo_replaced")
     finally:
         c.close()
@@ -1003,7 +1002,7 @@ async def oneclick_photo_add(request: Request, did: int,
         cur_photos, _dr = _draft_photos(draft)
         if len(cur_photos) + len(blobs) > MAX_PHOTOS:
             raise HTTPException(400, f"最多{MAX_PHOTOS}张照片")
-        _save_upload_blobs(blobs)
+        _save_upload_blobs(blobs, c)
         _set_draft_photos(c, did, cur_photos + [f for f, _d in blobs], draft)
         c.commit()
         return redirect(f"/oneclick/{did}", "photo_added")
@@ -1025,9 +1024,8 @@ def oneclick_photo_delete(request: Request, did: int, idx: int):
         removed = cur_photos.pop(idx)
         _set_draft_photos(c, did, cur_photos, draft)
         c.commit()
-        p = d.UPLOAD_DIR / Path(removed).name
-        if p.exists():
-            p.unlink()
+        from . import storage
+        storage.delete(Path(removed).name)
         return redirect(f"/oneclick/{did}", "photo_deleted")
     finally:
         c.close()
@@ -1406,6 +1404,15 @@ def ai_job_get(request: Request, jid: int):
 
 @app.get("/uploads/{name}")
 def serve_upload(name: str):
+    from . import storage
+    if storage.in_database():
+        import mimetypes
+        from fastapi.responses import Response
+        try:
+            data = storage.read(Path(name).name)
+        except FileNotFoundError:
+            raise HTTPException(404, "not found")
+        return Response(data, media_type=mimetypes.guess_type(name)[0] or "application/octet-stream")
     p = d.UPLOAD_DIR / Path(name).name
     if not p.exists():
         raise HTTPException(404, "not found")
@@ -2942,7 +2949,8 @@ async def _delivery_photo(request, did, target, field):
             ext = Path(photo.filename).suffix.lower()
             if ext in ALLOWED_IMG and len(data) <= 5 * 1024 * 1024:
                 fname = f"{uuid.uuid4().hex}{ext}"
-                (d.UPLOAD_DIR / fname).write_bytes(data)
+                from . import storage
+                storage.save(fname, data, c)
         c.execute(f"UPDATE deliveries SET status=?,{field}=? WHERE id=?",
                   (target, fname, did))
         audit_log(c, user["id"], "delivery_transition", "delivery", did,

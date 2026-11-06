@@ -324,8 +324,14 @@ CREATE TABLE IF NOT EXISTS comp_cache(
 def connect():
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
+    from .remote_db import configuration
+    url, _ = configuration()
+    if url or os.environ.get("YUNO_DB_DRIVER") == "libsql":
+        from .remote_db import connect as libsql_connect
+        conn = libsql_connect(DB_PATH)
+    else:
+        conn = sqlite3.connect(DB_PATH)
+        conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys=ON")
     return conn
 
@@ -334,6 +340,9 @@ def init_db():
     conn = connect()
     try:
         conn.executescript(SCHEMA)
+        from .storage import SCHEMA as STORAGE_SCHEMA, in_database
+        if in_database():
+            conn.executescript(STORAGE_SCHEMA)
         for slug, nja, nzh, nen, attrs in CATEGORIES:
             attrs_json = json.dumps([
                 {"key": k, "label_ja": lj, "label_zh": lz, "label_en": le, "type": t}
