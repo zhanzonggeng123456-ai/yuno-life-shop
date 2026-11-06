@@ -1,0 +1,13 @@
+**
+!Dockerfile
+!requirements.txt
+!app/
+!app/**
+!deploy/
+!deploy/**
+**/__pycache__
+**/*.pyc
+**/*.db
+**/*.sqlite3
+**/.env*
+**/*.zip

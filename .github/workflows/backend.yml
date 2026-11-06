@@ -1,0 +1,44 @@
+name: Public backend validation
+on:
+  push:
+    branches: [main, codex/public-backend]
+    paths: ['app/**', 'deploy/**', 'tests/**', 'scripts/cloud_smoke.py', 'requirements.txt', 'Dockerfile', '.dockerignore', '.github/workflows/backend.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: backend-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  container:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - name: Backend regression
+        run: |
+          python3 -m venv .venv
+          .venv/bin/pip install -r requirements.txt
+          .venv/bin/python -m pytest tests -q
+      - name: Build isolated YUNO container
+        run: docker build --tag yuno-backend-ci .
+      - name: Refuse an ephemeral deployment
+        run: |
+          if docker run --rm yuno-backend-ci > "$RUNNER_TEMP/no-volume.log" 2>&1; then
+            echo 'Container must refuse to start without a persistent volume'
+            exit 1
+          fi
+          grep -q 'persistent volume' "$RUNNER_TEMP/no-volume.log"
+      - name: Verify storage across container recreation
+        run: |
+          docker volume create yuno-backend-ci
+          docker run -d --name yuno-backend-ci -p 127.0.0.1:18000:8000 -v yuno-backend-ci:/data yuno-backend-ci
+          python3 scripts/cloud_smoke.py create --state "$RUNNER_TEMP/yuno-qa.json"
+          docker rm -f yuno-backend-ci
+          docker run -d --name yuno-backend-ci -p 127.0.0.1:18000:8000 -v yuno-backend-ci:/data yuno-backend-ci
+          python3 scripts/cloud_smoke.py verify --state "$RUNNER_TEMP/yuno-qa.json"
+      - name: Clean only disposable YUNO CI resources
+        if: always()
+        run: |
+          docker rm -f yuno-backend-ci 2>/dev/null || true
+          docker volume rm yuno-backend-ci 2>/dev/null || true
