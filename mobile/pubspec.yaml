@@ -45,6 +45,7 @@ dependencies:
   path_provider_android: 2.2.15
 
 dev_dependencies:
+  image_picker_platform_interface: ^2.11.2
   integration_test:
     sdk: flutter
   flutter_test:

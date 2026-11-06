@@ -55,7 +55,10 @@ void main() {
       expect(find.byType(ActionForm), findsNothing);
       expect(app.user?['email'], sellerEmail);
       final sellerId = app.user!['id'];
-      expect((await app.secure.read(key: 'session:${app.server}')) == app.token, isTrue);
+      expect(
+        (await app.secure.read(key: 'session:${app.server}')) == app.token,
+        isTrue,
+      );
 
       // Valid small PNGs, isolated to the QA database and device temp directory.
       final bytes = base64Decode(
@@ -122,12 +125,20 @@ void main() {
         'password': buyerPassword,
       });
       final buyerId = app.user!['id'];
-      await app.action('thread_post', {
-        'lid': lid,
-        'buyer_id': buyerId,
-        'body': 'QA 商品の状態を確認します',
-      });
+      nav.push(
+        MaterialPageRoute<void>(
+          builder: (_) => ThreadPage(lid: lid, buyerId: buyerId),
+        ),
+      );
+      await settle(tester);
+      await tester.enterText(find.byType(TextField).last, 'QA 商品の状態を確認します');
+      FocusManager.instance.primaryFocus?.unfocus();
+      await settle(tester);
+      await tester.tap(find.byIcon(Icons.send_outlined));
+      await settle(tester);
       expect((await app.get('threads/$lid/$buyerId'))['items'].length, 1);
+      nav.pop();
+      await settle(tester);
       final order = (await app.action('buy', {'lid': lid}))['id'];
       final pay = {'oid': order, 'idempotency_key': randomText()};
       await app.action('order_pay', pay);

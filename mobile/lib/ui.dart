@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import 'api.dart';
 import 'labels.dart';
@@ -156,6 +157,15 @@ class ErrorPanel extends StatelessWidget {
 }
 
 String errorText(Object error) {
+  if (error is PlatformException) {
+    if (RegExp('camera|photo|image|picker').hasMatch(error.code)) {
+      return tx(
+        '相机或相册暂时不可用，请检查系统权限，也可以选择相册入口。',
+        'カメラ・アルバムを利用できません。システム権限を確認するか、アルバムから選択してください。',
+      );
+    }
+    return tx('设备功能暂不可用，请检查系统权限后重试。', '端末機能を利用できません。システム権限を確認して再試行してください。');
+  }
   if (error is ApiFailure) {
     if (words.containsKey(error.code)) return label(error.code);
     return '${tx('操作未成功，请检查输入与当前状态', '入力と現在の状態を確認してください')} (${error.status})';

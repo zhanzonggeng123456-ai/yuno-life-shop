@@ -53,12 +53,13 @@ class _HomeShellState extends State<HomeShell> {
   @override
   Widget build(BuildContext context) {
     final labels = ['market', 'prices', 'trade', 'orders', 'me'];
+    final pageKey = ValueKey(appState.language);
     final pages = [
-      const Marketplace(),
-      const MarketPrices(),
-      const TradeHub(),
-      const CollectionPage(resource: 'orders', embedded: true),
-      const ProfilePage(),
+      Marketplace(key: pageKey),
+      MarketPrices(key: pageKey),
+      TradeHub(key: pageKey),
+      CollectionPage(key: pageKey, resource: 'orders', embedded: true),
+      ProfilePage(key: pageKey),
     ];
     return Scaffold(
       body: SafeArea(
@@ -1359,9 +1360,17 @@ class _ThreadPageState extends State<ThreadPage> {
                           error = null;
                         });
                         try {
+                          final thread = await appState.get(
+                            'threads/${widget.lid}/${widget.buyerId}',
+                          );
+                          final receiver =
+                              appState.user?['id'] == widget.buyerId
+                              ? thread['seller_id']
+                              : widget.buyerId;
                           await appState.action('thread_post', {
                             'lid': widget.lid,
                             'buyer_id': widget.buyerId,
+                            'receiver_id': receiver,
                             'body': input.text,
                           });
                           input.clear();

@@ -75,19 +75,31 @@ class ShopState extends ChangeNotifier with WidgetsBindingObserver {
         (uri.path.isNotEmpty && uri.path != '/')) {
       throw ApiFailure('invalid_server', 400);
     }
-    server = address.trim().replaceAll(RegExp(r'/+$'), '');
-    user = null;
-    token = await secure.read(key: 'session:$server');
-    config = await get('config');
-    await preferences.setString('server', server);
-    if (token != null) {
-      try {
-        user = (await get('me'))['user'];
-      } on ApiFailure catch (e) {
-        if (e.status != 401) rethrow;
+    final previousServer = server;
+    final previousUser = user;
+    final previousToken = token;
+    final previousConfig = config;
+    try {
+      server = address.trim().replaceAll(RegExp(r'/+$'), '');
+      user = null;
+      token = await secure.read(key: 'session:$server');
+      config = await get('config');
+      if (token != null) {
+        try {
+          user = (await get('me'))['user'];
+        } on ApiFailure catch (e) {
+          if (e.status != 401) rethrow;
+        }
       }
+      await preferences.setString('server', server);
+      changed();
+    } catch (_) {
+      server = previousServer;
+      user = previousUser;
+      token = previousToken;
+      config = previousConfig;
+      rethrow;
     }
-    changed();
   }
 
   Map<String, String> get headers => {

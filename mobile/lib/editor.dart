@@ -71,12 +71,14 @@ class _ActionFormState extends State<ActionForm> {
       if (!mounted) return;
       setState(() => schema = action);
       if (cameraFirst) {
-        final lost = await picker.retrieveLostData();
-        if (lost.files != null && mounted) {
-          setState(() => photos.addAll(lost.files!.take(10)));
-        } else if (mounted) {
-          await pick(ImageSource.camera);
+        if (Platform.isAndroid) {
+          final lost = await picker.retrieveLostData();
+          if (lost.files != null && mounted) {
+            setState(() => photos.addAll(lost.files!.take(10)));
+            return;
+          }
         }
+        if (mounted) await pick(ImageSource.camera);
       }
     } catch (e) {
       if (mounted) setState(() => error = e);
