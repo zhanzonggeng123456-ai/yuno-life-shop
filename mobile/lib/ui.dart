@@ -8,6 +8,26 @@ import 'main.dart';
 Future<T?> openPage<T>(BuildContext context, Widget page) =>
     Navigator.of(context).push<T>(MaterialPageRoute(builder: (_) => page));
 
+String? itemName(Json item) {
+  for (final key in [
+    'title_${appState.language}',
+    'title_ja',
+    'title_zh',
+    'name',
+  ]) {
+    final value = item[key];
+    if (value is String && value.trim().isNotEmpty) return value;
+  }
+  return null;
+}
+
+int? draftReferencePrice(Json valuation) {
+  final low = valuation['low'];
+  final high = valuation['high'];
+  if (valuation['kind'] != 'market' || low is! num || high is! num) return null;
+  return ((low + high) / 2).round();
+}
+
 String money(dynamic value) => value == null
     ? '—'
     : '¥${value.toString().replaceAllMapped(RegExp(r'(\d)(?=(\d{3})+(?!\d))'), (m) => '${m[1]},')}';

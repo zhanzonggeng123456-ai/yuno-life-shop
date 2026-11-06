@@ -42,6 +42,7 @@ jobs:
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
       - name: Native Android acceptance
+        timeout-minutes: 20
         uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d
         with:
           api-level: 35
@@ -49,7 +50,7 @@ jobs:
           target: google_apis
           disable-animations: true
           working-directory: mobile
-          script: YUNO_QA=true flutter test integration_test/app_test.dart -d emulator-5554 --dart-define=YUNO_SERVER=http://10.0.2.2:8765
+          script: YUNO_QA=true flutter drive --driver=test_driver/integration_test.dart --target=integration_test/app_test.dart -d emulator-5554 --dart-define=YUNO_SERVER=http://10.0.2.2:8765
       - name: Build internal Android package
         working-directory: mobile
         run: flutter build apk --release --target-platform android-arm64
@@ -106,8 +107,9 @@ jobs:
           xcrun simctl boot "$DEVICE_ID" || true
           xcrun simctl bootstatus "$DEVICE_ID" -b
       - name: Native iOS acceptance
+        timeout-minutes: 20
         working-directory: mobile
-        run: flutter test integration_test/app_test.dart -d "$DEVICE_ID" --dart-define=YUNO_SERVER=http://127.0.0.1:8765
+        run: flutter drive --driver=test_driver/integration_test.dart --target=integration_test/app_test.dart -d "$DEVICE_ID" --dart-define=YUNO_SERVER=http://127.0.0.1:8765
       - name: Build and launch simulator app
         working-directory: mobile
         run: |

@@ -28,13 +28,19 @@ void main() {
   testWidgets(
     'Native login, photos, AI draft, trading, services, messages and language',
     (tester) async {
-      await app.initialize();
-      await app.connect(const String.fromEnvironment('YUNO_SERVER'));
+      debugPrint('YUNO acceptance: initialize');
+      await app.initialize().timeout(const Duration(seconds: 30));
+      debugPrint('YUNO acceptance: connect');
+      await app
+          .connect(const String.fromEnvironment('YUNO_SERVER'))
+          .timeout(const Duration(seconds: 30));
+      debugPrint('YUNO acceptance: render');
       await app.languageChoice('zh');
       await tester.pumpWidget(const shop.YunoApp());
       await settle(tester);
       expect(find.byType(NavigationDestination), findsNWidgets(5));
 
+      debugPrint('YUNO acceptance: native registration');
       // Register through the native form, using a fresh, ephemeral password.
       await tester.tap(find.byIcon(Icons.person_outline));
       await settle(tester);
@@ -60,6 +66,7 @@ void main() {
         isTrue,
       );
 
+      debugPrint('YUNO acceptance: photos and AI');
       // Valid small PNGs, isolated to the QA database and device temp directory.
       final bytes = base64Decode(
         'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=',
@@ -103,6 +110,7 @@ void main() {
       final listing = (await app.get('listings/$lid'))['item'];
       expect(listing['photos'].length, 2);
 
+      debugPrint('YUNO acceptance: native listing');
       // View the actual native product screen, including both photos.
       final nav = tester.state<NavigatorState>(find.byType(Navigator).first);
       nav.push(
@@ -124,6 +132,7 @@ void main() {
         'display_name': 'QA 購入者',
         'password': buyerPassword,
       });
+      debugPrint('YUNO acceptance: native messages');
       final buyerId = app.user!['id'];
       nav.push(
         MaterialPageRoute<void>(
@@ -139,6 +148,7 @@ void main() {
       expect((await app.get('threads/$lid/$buyerId'))['items'].length, 1);
       nav.pop();
       await settle(tester);
+      debugPrint('YUNO acceptance: purchase and delivery');
       final order = (await app.action('buy', {'lid': lid}))['id'];
       final pay = {'oid': order, 'idempotency_key': randomText()};
       await app.action('order_pay', pay);
@@ -159,6 +169,7 @@ void main() {
         'comment': 'QA',
       });
 
+      debugPrint('YUNO acceptance: three services');
       for (final kind in [
         'cleaning_home',
         'transport_small',
@@ -178,6 +189,7 @@ void main() {
         'password': sellerPassword,
       });
       expect(app.user!['id'], sellerId);
+      debugPrint('YUNO acceptance: auction and buyback');
       final auctionListing = (await app.action('listing_create', {
         'category_slug': 'book',
         'title_ja': 'QA 本',
@@ -227,6 +239,7 @@ void main() {
       });
       await app.action('offer_accept', {'oid': offer['id']});
 
+      debugPrint('YUNO acceptance: navigation and language');
       // Switch all five root screens and check the native rendering.
       for (final icon in [
         Icons.storefront_outlined,
@@ -247,6 +260,7 @@ void main() {
       expect((await app.get('market'))['moves'], isA<Map>());
       await app.logout();
       expect(await app.secure.read(key: 'session:${app.server}'), isNull);
+      debugPrint('YUNO acceptance: complete');
       await temp.delete(recursive: true);
     },
     timeout: const Timeout(Duration(minutes: 5)),

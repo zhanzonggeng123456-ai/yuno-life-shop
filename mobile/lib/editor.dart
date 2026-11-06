@@ -402,13 +402,20 @@ class _ActionFormState extends State<ActionForm> {
     final choices = options(name);
     if (choices != null) {
       if (!choices.containsKey(controller.text)) {
-        controller.text = choices.keys.first;
+        controller.text = field['required'] == true ? '' : choices.keys.first;
       }
       return DropdownButtonFormField<String>(
         key: ValueKey('${appState.language}:$name'),
-        initialValue: controller.text,
+        initialValue: choices.containsKey(controller.text)
+            ? controller.text
+            : null,
         isExpanded: true,
         decoration: InputDecoration(labelText: label(name)),
+        hint: Text(tx('请选择', '選択してください')),
+        validator: (value) =>
+            field['required'] == true && (value == null || value.isEmpty)
+            ? tx('请确认此项', '項目を確認してください')
+            : null,
         items: [
           for (final e in choices.entries)
             DropdownMenuItem(

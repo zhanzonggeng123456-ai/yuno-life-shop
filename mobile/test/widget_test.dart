@@ -7,8 +7,61 @@ import 'package:shop/main.dart';
 import 'package:shop/labels.dart';
 import 'package:shop/api.dart';
 import 'package:shop/editor.dart';
+import 'package:shop/ui.dart';
 
 void main() {
+  testWidgets('An unrecognized category requires confirmation', (tester) async {
+    appState.config = {
+      'categories': [
+        {'slug': 'appliance', 'name_zh': '家电', 'name_ja': '家電', 'attrs': []},
+      ],
+      'actions': [
+        {
+          'name': 'listing_create',
+          'fields': [
+            {
+              'name': 'category_slug',
+              'type': 'text',
+              'required': true,
+              'default': null,
+            },
+          ],
+        },
+      ],
+    };
+    await tester.pumpWidget(
+      const MaterialApp(home: ActionForm(action: 'listing_create')),
+    );
+    await tester.pumpAndSettle();
+    final field = tester.widget<DropdownButtonFormField<String>>(
+      find.byType(DropdownButtonFormField<String>),
+    );
+    expect(field.initialValue, isNull);
+    expect(tester.state<FormState>(find.byType(Form)).validate(), isFalse);
+    appState.config = {};
+  });
+  test('Native draft uses the market interval midpoint and never a heuristic quote', () {
+    expect(
+      draftReferencePrice({'kind': 'market', 'low': 5000, 'high': 7500}),
+      6250,
+    );
+    expect(
+      draftReferencePrice({
+        'kind': 'estimate_reference',
+        'low': 1000,
+        'high': 2000,
+      }),
+      isNull,
+    );
+    expect(draftReferencePrice({'kind': 'no_market_price'}), isNull);
+  });
+  test('Legacy listings fall back to their available title', () {
+    appState.choice = 'zh';
+    expect(itemName({'title_zh': '', 'title_ja': '中古本'}), '中古本');
+    appState.choice = 'ja';
+    expect(itemName({'title_zh': '二手书', 'title_ja': ''}), '二手书');
+    appState.choice = 'system';
+  });
   testWidgets(
     'Camera-first publishing skips Android-only recovery on other hosts',
     (tester) async {

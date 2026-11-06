@@ -412,10 +412,7 @@ class ProductCard extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    item['title_${appState.language}']?.toString().isNotEmpty ==
-                            true
-                        ? item['title_${appState.language}']
-                        : item['title_ja'],
+                    itemName(item) ?? '#${item['id']}',
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(fontWeight: FontWeight.w600),
@@ -633,8 +630,7 @@ class MarketPrices extends StatelessWidget {
                   if (i == 0)
                     Text(up ? tx('最高涨幅', '最大上昇') : tx('最高跌幅', '最大下落')),
                   Text(
-                    items[i]['title_${appState.language}'] ??
-                        items[i]['title_ja'],
+                    itemName(items[i]) ?? '#${items[i]['listing_id']}',
                     maxLines: 2,
                   ),
                   Text(
@@ -729,15 +725,15 @@ class ProfilePage extends StatelessWidget {
         const SizedBox(height: 8),
         SegmentedButton<String>(
           showSelectedIcon: false,
-          segments: const [
-            ButtonSegment(value: 'zh', label: Text('中文')),
-            ButtonSegment(value: 'ja', label: Text('日本語')),
-            ButtonSegment(value: 'system', label: Icon(Icons.phone_android)),
+          segments: [
+            const ButtonSegment(value: 'zh', label: Text('中文')),
+            const ButtonSegment(value: 'ja', label: Text('日本語')),
+            ButtonSegment(value: 'system', label: Text(tx('跟随系统', 'システム'))),
           ],
           selected: {appState.choice},
           onSelectionChanged: (value) => appState.languageChoice(value.first),
         ),
-        Text(tx('手机图标代表跟随系统', '端末アイコンはシステム設定に従います')),
+        Text(tx('跟随系统会自动选择中文或日语', '端末の言語に応じて中国語・日本語を選択します')),
         ListTile(
           title: Text(tx('服务器连接', 'サーバー接続')),
           subtitle: Text(appState.server),
@@ -861,8 +857,7 @@ class _CollectionPageState extends State<CollectionPage> {
                   : panel(
                       ListTile(
                         title: Text(
-                          item['title_${appState.language}'] ??
-                              item['title_ja'] ??
+                          itemName(item) ??
                               (item['kind'] == null
                                   ? '#${item['id']}'
                                   : label(item['kind'])),
@@ -955,10 +950,7 @@ class _DetailPageState extends State<DetailPage> {
         final related = data['related'] as Json? ?? {};
         final actions = availableActions(item, related);
         final title =
-            item['title_${appState.language}'] ??
-            item['title_ja'] ??
-            item['name'] ??
-            '${label(widget.resource)} #${widget.id}';
+            itemName(item) ?? '${label(widget.resource)} #${widget.id}';
         final body = Map<String, dynamic>.from(item);
         for (final key in [
           'draft',
@@ -982,8 +974,8 @@ class _DetailPageState extends State<DetailPage> {
               ListTile(
                 leading: const Icon(Icons.inventory_2_outlined),
                 title: Text(
-                  related['listing']['title_${appState.language}'] ??
-                      related['listing']['title_ja'],
+                  itemName(related['listing']) ??
+                      '#${related['listing']['id']}',
                 ),
                 trailing: const Icon(Icons.chevron_right),
                 onTap: () => openPage(
@@ -1009,7 +1001,16 @@ class _DetailPageState extends State<DetailPage> {
                           ),
                         ),
                         const SizedBox(height: 10),
-                        infoData(item[field]),
+                        infoData(
+                          field == 'valuation'
+                              ? <String, dynamic>{
+                                  ...item[field],
+                                  'suggested_price': draftReferencePrice(
+                                    item[field],
+                                  ),
+                                }
+                              : item[field],
+                        ),
                         if (field == 'valuation') ...[
                           const SizedBox(height: 12),
                           const Text('此报价为AI根据现实数据做出的估价，用户可以根据自身另行填写'),
@@ -1166,8 +1167,11 @@ class _DetailPageState extends State<DetailPage> {
           add('ai_job_create', {
             'kind': 'oneclick_valuation',
             'draft_id': '$id',
+            'brand': draft['brand'] ?? '',
+            'model': draft['model'] ?? '',
+            'category_slug': draft['category_slug'] ?? '',
           });
-          final suggested = item['valuation']?['suggested_price'];
+          final suggested = draftReferencePrice(item['valuation'] ?? {});
           if (suggested != null) draft['price'] = suggested;
           add('oneclick_publish', {'did': id}, draft);
         }
