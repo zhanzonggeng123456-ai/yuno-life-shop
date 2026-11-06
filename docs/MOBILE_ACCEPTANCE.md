@@ -1,4 +1,6 @@
-# YUNO LIFE SHOP 原生手机试用验收
+# YUNO LIFE SHOP 原生手机试用验收（0.2.0 历史记录）
+
+> 0.2.1 公网版已经部署并在 iQOO 8 安装。当前地址、重建持久性与跨网络待验项见 [PUBLIC_DEPLOYMENT.md](PUBLIC_DEPLOYMENT.md)。下方局域网限制属于 0.2.0 当时的历史快照。
 
 验收日期：2026-11-06。实现要求：根目录 CODEX_APP_BRIEF.md。
 源代码：a6d9e98fe4ecf114d47dea2d65037c2882c8100e。

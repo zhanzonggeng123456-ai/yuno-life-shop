@@ -3,6 +3,19 @@
 Flutter 3.47.9，单代码库提供 Android 和 iOS 原生界面。应用通过
 `/api/v1` JSON 接口连接 FastAPI，不使用 WebView。
 
+## 已部署公网试用
+
+后端地址：`https://yuno-life-shop-production.up.railway.app`。
+0.2.1 (3) Android 内测包已预设此地址，不依赖电脑服务或同一个 Wi-Fi；
+手机需要能访问该地址的互联网连接。已有安装可在个人中心修改服务器地址。
+免费额度/休眠限制与实测边界见 [部署记录](../docs/PUBLIC_DEPLOYMENT.md)。
+
+公网版构建：
+
+```sh
+flutter build apk --release --target-platform android-arm64 --dart-define=YUNO_SERVER=https://yuno-life-shop-production.up.railway.app
+```
+
 ## 本地运行
 
 先在仓库根目录启动后端。局域网试用时设置 `YUNO_HOST=0.0.0.0`，
@@ -26,7 +39,7 @@ Android Keystore / iOS Keychain 支持的安全存储中。
 flutter build apk --release --target-platform android-arm64 --dart-define=YUNO_SERVER=http://电脑局域网IP:8000
 ```
 
-当前工程使用调试签名生成内部试用包。版本为 `0.2.0+2`，
+当前工程使用调试签名生成内部试用包。版本为 `0.2.1+3`，
 包名为 `com.yunolife.shop`。商店签名、上架和真实支付不在本次范围。
 
 Android 依赖固定了兼容版本，以复用现有 NDK 27 工具链。
