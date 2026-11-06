@@ -15,7 +15,7 @@
 | iOS 安装 | Release 中间产物经本机签名深度验证，可直接安装到连接的 iPhone 16e |
 | iOS 启动 | 当前 0.4.3（8）正常 Release 安装、启动及真实首页截图通过；历史 0.4.0 Profile 交易测试也已通过。历史签名/信任拒绝记录保留在下方 |
 | iPhone 原生流程测试 | 0.4.0 主要业务场景 68 秒通过；0.4.1 追加角色场景 67 秒通过，0.4.2 扩展为 84 秒通过，包含配送履约、退款/争议、买断入库、服务处理、原生登录/必填异常及 17 后台读取分区。媒体与文字输入为测试入口；硬件、系统权限及未执行的后台写操作不计通过，详见本记录最新小节 |
-| Android 构建 | 仅保留历史 0.1.0（2）APK；当前 0.4.0 构建尝试补齐 NDK 28.2 后磁盘只剩约 197 MiB，已主动停止本项目 Gradle 并清除新增 NDK 28，保留原有 NDK 27。新版未构建成功，未计通过 |
+| Android 构建 | 当前 0.4.3（8）调试包已构建、签名与 16 KB 对齐验证通过，见最新小节。历史：仅保留历史 0.1.0（2）APK；当前 0.4.0 构建尝试补齐 NDK 28.2 后磁盘只剩约 197 MiB，已主动停止本项目 Gradle 并清除新增 NDK 28，保留原有 NDK 27。新版未构建成功，未计通过 |
 | Android 运行 | 已创建独立 YunoNativeAcceptance 测试设备，不使用 Nino AVD；模拟器要求约 7.2 GiB 可用空间，当前不足，尚未启动及执行流程测试 |
 | 相机/相册硬件 | 未验收，测试 picker 不能替代硬件测试 |
 | 商店/真实支付/真实物流 | 明确不做，界面均作模拟说明 |
@@ -214,3 +214,31 @@ Android 当前包、真实相机/相册/系统键盘仍无通过证据；未执�
 实际尝试 Device Hub 的 View Screen 后一直停留 Connecting display，未能取得可操作手机屏幕；真实相机/相册/系统键盘仍无通过证据。
 其余未执行的后台写操作、拍卖到期结算等不扩大计入通过范围。此前硬件问题用户仅回复“允许”，不是拍照和相册成功的结果。
 未改动 Nino、共享证书/描述文件；本地提交不代表已推送 GitHub。
+
+
+### 2026-11-06 续验：拍卖到期与后台决策
+
+`mobile/integration_test/settlement_flow_test.dart` 在实际 iPhone **25 秒通过**，日志 `outputs/settlement-device-final.log`。
+
+- 拍卖成交结算后为 ended_sold；再次原生结算，买家对应商品仍只有一笔订单；原生模拟支付及确认收货后 completed。另一个无出价过期拍卖原生结算后 ended_unsold。
+- 原生异常扫描产生本轮大幅跳价预警，点击“确认处理”并核对 acknowledged。
+- 原生生成调价建议后，对两个不同库存分别“批准调价”和“驳回”；读取 approved/rejected，批准商品价格等于建议价格、驳回商品价格保持 22000；审计包含结算、预警确认、价格修改与驳回。
+- 首轮测试样本中位数等于其中一个库存原价，因此业务正确地没有生成该商品的调价建议，脚本 firstWhere 失败；补足低价同行 fixture 后，换新数字编号重跑通过。原业务规则没有为测试改动。
+- 使用独立 data/acceptance-settlement-* 库。`acceptance_roles.py --lifecycle-fixtures` 仅处理本轮精确卖家邮箱与命名商品：准备老库存与拍卖时间，用以避免等待几十天或真实拍卖结束；不能将此记为真实时间流逝验证。调用日常库时仍被路径保护拒绝（退出码 2，`settlement-fixture-guard.log`）。
+- 媒体/系统键盘没有在本次测试中操作。Device Hub 现明确提示 Screen Sharing Unavailable，iPhone 须 iOS 27.0 或以上；当前为 iOS 26.5。不会擅自升级手机。
+- 测试后正常 **0.4.3（8）** Release 已签名验证、恢复安装、启动并核对实际首页截图（outputs/settlement-normal-phone.png）。没有留下测试入口。
+
+
+### 当前 Android 包构建突破与剩余运行阻断
+
+在本机显式选择已安装 NDK 27.1 和 CMake 3.22.1，项目内通过 Gradle finalizeDsl 配置插件工具链，开启 flexible page sizes；没有修改共享 SDK 或 pub 插件源码，默认构建仍选 NDK 28.2。
+这是新的低占用构建路径，不是再次下载之前耗尽空间的 NDK 28。
+
+- **0.4.3（8）Android APK 当前版构建成功**，102 MB：`outputs/yuno-life-0.4.3-arm64-debug.apk`。
+- `aapt dump badging` 确认 applicationId=com.yunolife.shop.dev、versionName=0.4.3、versionCode=8、minSdk=24。
+- APK 签名验证通过，ZIP 16 KB 对齐检查通过；包内各 `.so` 的 LOAD 对齐为 0x4000 或 0x10000，没有低于 16 KB。日志：`android-ndk27-signature.log`、`android-ndk27-zipalign.log`、`android-ndk27-elf.log`。
+- 构建证据 `android-ndk27-variant.log`（94.9 秒，Built app-debug.apk）。较早 Gradle 回调时机配置失败日志保留，不作成功证据；最终使用 finalizeDsl 修正。
+- 本机只启动独立 YunoNativeAcceptance，未使用 Nino AVD。实际启动发现系统镜像创建 userdata 时仍要求 7372.80 MB；缩小本项目配置和官方 qcow2 选项不能解除该要求，均返回明确空间错误。没有跳过空间检查或强制写满磁盘。
+- Android **安装与运行仍未通过**，不能把 APK 构建或 ELF 对齐代替实际 16 KB 系统运行。日志：`android-yuno-boot-final.log`、`android-yuno-qcow2.log`。
+- 已保留 APK 与 iOS 正常 Release，清除本项目 Android/iOS 重复构建中间文件，以及本轮 Flutter 引擎版本唯一的解压转换缓存（可从已缓存原始依赖再生成），空间恢复约 2.7 GiB；未改 Nino、NDK 27、共享证书/描述文件。
+- 本轮 8003 与角色/时间 fixture 已停止，正常 8002 持续运行。iPhone 仍为正常 0.4.3（8）包。全线验收仍缺真实相机、相册、系统键盘和 Android 安装运行证据。

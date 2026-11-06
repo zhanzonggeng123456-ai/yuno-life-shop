@@ -7,7 +7,7 @@ plugins {
 android {
     namespace = "com.yunolife.yuno_life"
     compileSdk = flutter.compileSdkVersion
-    ndkVersion = "28.2.13676358"
+    ndkVersion = System.getenv("YUNO_ANDROID_NDK_VERSION") ?: "28.2.13676358"
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17

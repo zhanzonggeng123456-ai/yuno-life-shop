@@ -14,6 +14,8 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--db', type=Path, required=True)
     parser.add_argument('--run-id', required=True)
+    parser.add_argument('--lifecycle-fixtures', action='store_true',
+                        help='Age only this run\'s named stock/auction fixtures')
     args = parser.parse_args()
     root = Path(__file__).resolve().parents[2]
     path = args.db.resolve(strict=True)
@@ -27,6 +29,16 @@ def main():
             for role in ('admin', 'courier', 'appraiser'):
                 conn.execute('UPDATE users SET role=? WHERE email=? AND role=?',
                              (role, f'role-acceptance-{args.run_id}-{role}@acceptance.invalid', 'user'))
+            if args.lifecycle_fixtures:
+                email = f'role-acceptance-{args.run_id}-seller@acceptance.invalid'
+                for suffix in ('stock-approve', 'stock-reject'):
+                    title = f'DEMO lifecycle {args.run_id} {suffix}'
+                    row = conn.execute('SELECT l.id FROM listings l JOIN users u ON u.id=l.seller_id WHERE u.email=? AND l.title_ja=?', (email, title)).fetchone()
+                    if row:
+                        conn.execute("UPDATE listings SET created_at='2000-01-01T00:00:00+00:00' WHERE id=?", (row[0],))
+                        conn.execute("INSERT INTO inventory(listing_id,cost,status,created_at) SELECT ?,1000,'in_stock','2000-01-01T00:00:00+00:00' WHERE NOT EXISTS (SELECT 1 FROM inventory WHERE listing_id=?)", (row[0],row[0]))
+                title = f'DEMO lifecycle {args.run_id} expire-sold'
+                conn.execute("UPDATE auctions SET ends_at='2000-01-01T00:00:00+00:00' WHERE status='active' AND listing_id IN (SELECT l.id FROM listings l JOIN users u ON u.id=l.seller_id WHERE u.email=? AND l.title_ja=?) AND EXISTS (SELECT 1 FROM bids WHERE auction_id=auctions.id)", (email,title))
         time.sleep(.2)
 
 

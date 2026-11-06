@@ -138,3 +138,23 @@ flutter drive --profile --keep-app-running --no-uninstall-first \
 订单读取中的 `listing` 字段包含商品标题与照片，便于原生订单卡片展示。以上均为读取扩展。
 
 `integration_test/closure_flow_test.dart` 使用同一隔离角色工具与新运行编号，补验拍卖保证金/出价拒绝恢复、一口价取消、后台角色修改、商品上下架和扫描审计。不是相机或系统键盘测试。
+
+
+### 低占用 Android 验收构建
+
+本机可显式复用 NDK 27.1.12297006 与 CMake 3.22.1：
+
+```sh
+# mobile/；JAVA_HOME 指向本机 JDK 17
+YUNO_ANDROID_NDK_VERSION=27.1.12297006 flutter build apk --debug --no-pub \
+  --target-platform android-arm64 \
+  --dart-define=API_BASE_URL=http://Mac的局域网IP:8002
+```
+
+此选项仅用于已验证的本地验收工具链，Gradle 统一配置本项目和 Android 插件，开启 NDK 27 的 flexible page sizes。
+默认仍为 NDK 28.2；不改共享 SDK 或依赖源码。16 KB 支持依据见 [Android 官方说明](https://developer.android.com/guide/practices/page-sizes)。
+当前 APK 的 ZIP/ELF 对齐与签名均已检查；独立模拟器仍要求约 7.2 GB 可用空间，运行未通过。
+
+`integration_test/settlement_flow_test.dart` 补验到期结算、重复结算、流拍、预警确认与调价批准/驳回。
+启动相同的隔离角色工具时加 `--lifecycle-fixtures`；仅本轮精确卖家邮箱和指定测试商品会被准备为老库存/过期拍卖。
+该时间与库存准备属于 fixture，不是真实时间流逝，也不是生产管理接口。
