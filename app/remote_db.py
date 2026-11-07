@@ -49,7 +49,13 @@ class Connection:
         return Cursor(self.connection.execute(sql, tuple(params)))
 
     def executescript(self, sql):
-        return self.connection.executescript(sql)
+        # libsql 0.1.11 Connection.executescript silently discards SQL errors.
+        # Its cursor API correctly propagates them; initialization must fail closed.
+        cursor = self.connection.cursor()
+        try:
+            cursor.executescript(sql)
+        finally:
+            cursor.close()
 
     def commit(self):
         self.connection.commit()

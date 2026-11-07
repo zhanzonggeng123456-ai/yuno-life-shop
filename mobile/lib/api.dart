@@ -140,7 +140,9 @@ class ShopState extends ChangeNotifier with WidgetsBindingObserver {
       return await decode(
         await client
             .get(uri, headers: headers)
-            .timeout(const Duration(seconds: 20)),
+            // Free hosting may need about a minute to wake after inactivity.
+            // This only extends read waiting; mutations are never retried.
+            .timeout(const Duration(seconds: 90)),
       );
     } on SocketException {
       throw ApiFailure('connection_failed', 0);

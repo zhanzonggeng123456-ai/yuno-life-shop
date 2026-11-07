@@ -2,7 +2,7 @@ name: Public backend validation
 on:
   push:
     branches: [main, codex/public-backend]
-    paths: ['app/**', 'deploy/**', 'tests/**', 'scripts/cloud_smoke.py', 'requirements*.txt', 'Dockerfile', '.dockerignore', '.github/workflows/backend.yml']
+    paths: ['app/**', 'deploy/**', 'tests/**', 'scripts/cloud_smoke.py', 'scripts/automated_backup.py', 'requirements*.txt', 'Dockerfile', '.dockerignore', '.github/workflows/backend.yml', '.github/workflows/backup.yml']
   workflow_dispatch:
 permissions:
   contents: read

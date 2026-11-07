@@ -22,6 +22,26 @@ def copy_database(source, destination):
         "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'").fetchall()
     if existing:
         raise ValueError("Destination database must be empty; refusing overwrite")
+    if isinstance(source, sqlite3.Connection) and isinstance(destination, remote_db.Connection):
+        # A small migration can be sent as one official SDK batch, keeping the
+        # write transaction on the server instead of holding it over many RPCs.
+        script = '\n'.join(source.iterdump())
+        if len(script.encode()) > 8 * 1024 * 1024:
+            raise ValueError('Use the official SQLite upload path for imports above 8 MiB SQL')
+        destination.execute('PRAGMA foreign_keys=OFF')
+        try:
+            destination.executescript(script)
+        except BaseException:
+            destination.rollback()
+            raise
+        for (table,) in source.execute("SELECT name FROM sqlite_master WHERE type='table'"):
+            expected = source.execute('SELECT COUNT(*) FROM ' + quoted(table)).fetchone()[0]
+            actual = destination.execute('SELECT COUNT(*) FROM ' + quoted(table)).fetchone()[0]
+            if actual != expected:
+                raise ValueError('Transferred row count mismatch; keep source and investigate')
+        if destination.execute('PRAGMA foreign_key_check').fetchone():
+            raise ValueError('Transferred foreign key check failed')
+        return
     schema = source.execute(
         "SELECT type,name,sql FROM sqlite_master WHERE sql IS NOT NULL AND name NOT LIKE 'sqlite_%' "
         "ORDER BY CASE type WHEN 'table' THEN 0 WHEN 'index' THEN 1 ELSE 2 END,name").fetchall()

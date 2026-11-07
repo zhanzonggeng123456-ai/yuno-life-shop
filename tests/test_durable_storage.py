@@ -65,6 +65,8 @@ def test_libsql_mapping_and_transaction_behavior(tmp_path):
         conn.execute('INSERT INTO example(title) VALUES(?)', ('rolled back',))
         conn.rollback()
         assert len(conn.execute('SELECT * FROM example').fetchall()) == 1
+        with pytest.raises(ValueError, match='syntax'):
+            conn.executescript('INVALID SQL')
 
 
 def test_native_private_draft_upload_and_media_survive_new_connections(monkeypatch):

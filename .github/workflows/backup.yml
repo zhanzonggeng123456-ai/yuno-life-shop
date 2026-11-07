@@ -1,0 +1,32 @@
+name: YUNO encrypted daily backup
+on:
+  schedule:
+    - cron: '23 18 * * *'
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: yuno-daily-backup
+  cancel-in-progress: false
+jobs:
+  backup:
+    if: github.repository == 'zhanzonggeng123456-ai/yuno-life-shop'
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Install only backup dependencies
+        run: |
+          python3 -m venv .venv
+          .venv/bin/pip install --no-cache-dir -r requirements-cloud.txt -r requirements-backup.txt
+      - name: Export, encrypt, upload private draft, download and restore
+        env:
+          TURSO_DATABASE_URL: ${{ secrets.YUNO_BACKUP_DATABASE_URL }}
+          TURSO_AUTH_TOKEN: ${{ secrets.YUNO_BACKUP_READ_TOKEN }}
+          YUNO_BACKUP_KEY: ${{ secrets.YUNO_BACKUP_KEY }}
+          GH_TOKEN: ${{ github.token }}
+        run: .venv/bin/python -m scripts.automated_backup --output "$RUNNER_TEMP/yuno-snapshot.yuno-backup" --publish
+      # No Actions artifacts or shared caches: encrypted bytes stay in an
+      # unpublished draft release, separate from Nino's storage/minute quotas.
