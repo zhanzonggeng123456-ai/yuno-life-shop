@@ -26,10 +26,10 @@ class NativeGateway:
             await send(message)
 
         if path == "/" and scope["method"] in ("GET", "HEAD"):
-            response = JSONResponse({"app": "YUNO LIFE SHOP", "api": "/api/v1",
+            response = JSONResponse({"app": "YUNO LIFE SHOP", "api": "/api/v2", "legacy_api": "/api/v1",
                                      "payment": "simulated", "delivery": "simulated"})
             await response(scope, receive, secured_send)
-        elif (path == "/healthz" or path.startswith("/api/v1/")
+        elif (path == "/healthz" or path.startswith(("/api/v1/", "/api/v2/"))
               or path.startswith("/uploads/")):
             await self.backend(scope, receive, secured_send)
         else:
