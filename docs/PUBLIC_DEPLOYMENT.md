@@ -1,5 +1,7 @@
 # YUNO 独立公网后端：免费试用部署记录
 
+> 历史记录：2026-11-06 已迁移至 **https://yuno-life-shop-free.onrender.com**（Render Free + Turso Free），旧 Railway 活动部署已停止。每日独立备份已配置并完成首次工作流、下载恢复验收；见 [最新部署与备份恢复记录](FREE_HOSTING_RECOVERY.md)。以下 Railway 0.2.1 内容保留为历史，不是当前手机入口。
+
 用户约束：只用免费方案，不开付费服务，不影响 Nino。
 本配置属于独立 yuno-life-shop 仓库，不读取或修改 Nino 配置、域名、数据库、部署或工具链。
 

@@ -5,15 +5,15 @@ Flutter 3.47.9，单代码库提供 Android 和 iOS 原生界面。应用通过
 
 ## 已部署公网试用
 
-后端地址：`https://yuno-life-shop-production.up.railway.app`。
-0.2.1 (3) Android 内测包已预设此地址，不依赖电脑服务或同一个 Wi-Fi；
+后端地址：`https://yuno-life-shop-free.onrender.com`。
+0.2.2 (4) Android 内测包已预设此地址，不依赖电脑服务或同一个 Wi-Fi；
 手机需要能访问该地址的互联网连接。已有安装可在个人中心修改服务器地址。
-免费额度/休眠限制与实测边界见 [部署记录](../docs/PUBLIC_DEPLOYMENT.md)。
+非试用型免费部署、每日备份和恢复实测见 [部署与恢复记录](../docs/FREE_HOSTING_RECOVERY.md)。空闲后首次读取可等待约一分钟，客户端读取等待上限 90 秒；写请求不自动重试。旧 Railway 试用入口已停用。
 
 公网版构建：
 
 ```sh
-flutter build apk --release --target-platform android-arm64 --dart-define=YUNO_SERVER=https://yuno-life-shop-production.up.railway.app
+flutter build apk --release --target-platform android-arm64 --dart-define=YUNO_SERVER=https://yuno-life-shop-free.onrender.com
 ```
 
 ## 本地运行

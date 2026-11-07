@@ -12,8 +12,9 @@ AI 驱动、全品类、支持多种交易模式的中古交易平台。
 构建、手机连接和验收方法见 [mobile/README.md](mobile/README.md)。
 接口说明见 [docs/MOBILE_API.md](docs/MOBILE_API.md)。
 验收记录与试用限制见 [docs/MOBILE_ACCEPTANCE.md](docs/MOBILE_ACCEPTANCE.md)。
-独立公网后端的免费试用部署记录与实测边界见 [docs/PUBLIC_DEPLOYMENT.md](docs/PUBLIC_DEPLOYMENT.md)。
-无试用倒计时免费托管的准备状态、独立加密备份与恢复见 [docs/FREE_HOSTING_RECOVERY.md](docs/FREE_HOSTING_RECOVERY.md)。
+当前公网后端为 [YUNO 免费服务](https://yuno-life-shop-free.onrender.com)，Android 内测版 0.2.2。
+非试用型免费托管、每日独立加密备份和实际恢复验收见 [docs/FREE_HOSTING_RECOVERY.md](docs/FREE_HOSTING_RECOVERY.md)。
+此前 Railway 试用记录保留在 [docs/PUBLIC_DEPLOYMENT.md](docs/PUBLIC_DEPLOYMENT.md)，旧活动部署已停止。
 实现要求保留在 [CODEX_APP_BRIEF.md](CODEX_APP_BRIEF.md)。
 
 手机使用局域网后端时，在 PowerShell 设置 `$env:YUNO_HOST="0.0.0.0"`，

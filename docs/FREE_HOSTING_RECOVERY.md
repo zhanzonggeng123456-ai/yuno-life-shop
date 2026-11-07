@@ -1,6 +1,18 @@
 # 免费托管、独立备份与恢复
 
-当前状态：现有 Railway Trial 继续服务；Render Free + Turso Free 的代码适配和配置已准备，**尚未迁移上线**。不能把本地 libSQL 驱动测试当作真实 Turso 云端验收。换网络手机实测由用户另行安排。未开通付费、未绑定支付方式、不操作 Nino。
+当前状态（2026-11-06，America/New_York）：**Render Free + Turso Free 已上线，独立每日备份已配置，首次工作流与恢复验收通过**。正式地址为 **https://yuno-life-shop-free.onrender.com**。iQOO 8 已升级 0.2.2 (4)，切换到新地址并验证冷启动后配置保留。旧 Railway 试用实例已停止，服务与旧数据卷保留，不再接收写入。换网络实测仍按用户要求暂缓。未开通付费、未绑定支付方式、未操作 Nino。
+
+## 本次实际上线与验收
+
+- Render 服务：`srv-dbn7gvm7bikc73aj4e90`，Singapore，Docker **Free**，单进程，健康检查 `/healthz`，自动部署 Off。首次部署 `dep-dbn7h0e7bikc73aj4gv0`，运行源码 `dc71f73dfe58502b8e681c98898e51f412efb38c`。项目 `prj-dbn7gvjrjlhs739nm100`。使用公开仓库 URL 部署，没有给 Render 扩大私有仓库权限。
+- Turso：`yuno-life-shop-free`，Free，AWS Singapore，libSQL。最新原库迁入后核对 1 个原验收账号、1 份未发布草稿、2 张原图、0 订单；原账号与草稿 ID 保留。运行读写令牌与备份只读令牌分离，并实际确认只读令牌写入被拒绝。
+- 公网 HTTPS 验证健康、配置三项服务、账号与私有草稿鉴权、两张原图 SHA-256、模拟支付标注、管理/文档路由拒绝公开访问。临时验收会话已撤销，旧 token 返回 401。没有发布假商品、价格或订单。
+- 手动 Restart service 后再次执行同一组公网数据与鉴权校验，全部通过。手机在现有 Wi-Fi 下切换成功，停止旧 Railway 后强制结束并冷启动仍使用新地址。未关闭 Wi-Fi、未改移动网络/漫游/APN。
+- 第一次备份工作流：[42321717105](https://github.com/zhanzonggeng123456-ai/yuno-life-shop/actions/runs/42321717105)，由 workflow_dispatch 主动触发验收，成功。每日 cron 已在 main 生效；首次未来定时触发尚未到时间，不能当作已经观察到定时触发。
+- 备份草稿 Release ID `437226449`，tag `yuno-backup-20261107T010211Z-42321717105`，附件 11,640 字节，`draft=true`。匿名访问返回 404。工作流重新下载、解密恢复成功后，本机又独立下载恢复一次，确认会话 0、原账号 1、草稿 1、图片 2。密文 SHA-256：`e567a975dfac5555bf495fb012f9dc8edf4490be0401a65cbf79932bd0307873`。
+- 后端验证 [42321522964](https://github.com/zhanzonggeng123456-ai/yuno-life-shop/actions/runs/42321522964)：SQLite 与 libSQL 两轮各 120 项通过，Docker 构建、拒绝临时磁盘、容器重建数据保留检查通过。CI 固定 Python 3.12 与生产镜像一致，并在测试重置前等待 AI 工作线程关闭 SQLite，消除旧测试删除数据库时的句柄竞争。
+- Android 0.2.2 (4) 构建、覆盖安装成功，包名 `com.yunolife.shop`，保留用户偏好与安装数据。APK SHA-256：`7d698e729cfc462154816328a4413c47d1db31d396f5c5cd53fd36067fea2229`。Flutter analyze 与 7 项 widget 测试通过。此轮没有构建新的 iOS 包，不把旧 iOS 构建记为 0.2.2 实机验收。
+- 旧 Railway 服务 `6b781eab-5770-4237-8e6d-9f777d90cd6f` 已无活动部署，卷 `b9db08f9-7665-484b-a80d-491b85f2d279` 保留。旧地址不可再作为手机入口；不要直接重新启动旧卷对外接单，避免数据分叉。恢复时先冻结写入、使用已验证的最新独立备份。
 
 ## 免费档边界
 
@@ -57,7 +69,7 @@ python -m deploy.backup restore --archive <备份目录>/yuno-snapshot.yuno-back
 
 工具检查数据库完整性、外键、清单、每个文件 SHA-256、引用照片和记录数量；拒绝路径穿越、符号链接、重复条目、篡改和覆盖既有目录。验证后原子发布恢复目录。当前工具总展开大小上限 256 MiB，超限报错，不算成功备份；达到前要实现流式加密/导出。手动工具不删除历史备份或业务数据。
 
-自动备份代码在 `.github/workflows/backup.yml` 与 `scripts/automated_backup.py`。计划在最终凭据具备后启用；**尚未完成真实调度验收，不能计为已经启用**。每天 18:23 UTC（日本次日 03:23）运行，GitHub 调度可能延迟。只使用当前公共 YUNO 仓库的标准 Linux runner，不使用私有 CI 分钟、Actions artifacts、共享附件存储或收费 runner，不创建 Nino 资源。
+自动备份代码在 `.github/workflows/backup.yml` 与 `scripts/automated_backup.py`，所需私密配置已设置，main 上已启用。每天 18:23 UTC（当前美东冬令时 13:23；夏令时 14:23，日本次日 03:23）运行，GitHub 调度可能延迟。只使用当前公共 YUNO 仓库的标准 Linux runner，不使用私有 CI 分钟、Actions artifacts、共享附件存储或收费 runner，不创建 Nino 资源。
 
 整个流程为：只读 Turso 凭据导出一致快照 → Fernet 加密 → 本地解密恢复 → 创建 `draft=true` 的**未发布草稿 Release** → 上传加密附件 → 重新下载并再次解密、恢复、校验。只有新备份真实下载恢复成功，才根据规则清理 YUNO 自己生成的旧草稿备份。完整附件保留最近 7 日和最近 4 个自然周的代表快照（重叠不重复）；不修改普通版本发布、未完成的草稿附件、业务表或 Nino。备份失败会保留旧备份并使 GitHub 工作流失败，以便账户已有的工作流失败通知生效。
 
@@ -69,7 +81,7 @@ python -m deploy.backup restore --archive <备份目录>/yuno-snapshot.yuno-back
 
 ## 本次迁移准备的补充核对
 
-已创建 `yuno-life-shop-free` 专用 libSQL 数据库，位于 AWS Singapore，账户为 Free。SQLite 网页文件上传未成功，因此改为空库再通过官方驱动导入；绝不覆盖已有业务表。当前迁移快照 SQL 约 19 KiB，适合单批事务；大于 8 MiB SQL 的导入会停止，不能悄悄分批产生半份数据。真实云连接、正式切换和自动备份仍须随后逐项验收。
+已创建 `yuno-life-shop-free` 专用 libSQL 数据库，位于 AWS Singapore，账户为 Free。SQLite 网页文件上传未成功，因此改为空库再通过官方驱动导入；绝不覆盖已有业务表。当前迁移快照 SQL 约 19 KiB，已通过单批事务实际导入。云端始终执行外键约束，导入脚本按依赖顺序先建父表、再插入父记录和图片块。大于 8 MiB SQL 的导入会停止，不能悄悄分批产生半份数据。
 
 官方 libSQL 0.1.11 驱动的连接级 `executescript` 会吞掉 SQL 错误，适配层改用会抛错的 cursor 方法，避免初始化失败却继续运行。相关回归已覆盖。手机读取等待延长至 90 秒，容纳免费后端休眠唤醒；写请求没有新增自动重试。
 
