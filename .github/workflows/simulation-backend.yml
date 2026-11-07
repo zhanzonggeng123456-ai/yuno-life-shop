@@ -1,0 +1,29 @@
+name: YUNO isolated backend simulation
+on:
+  push:
+    branches: [codex/simulation-120]
+    paths: ['.github/workflows/simulation-backend.yml', 'scripts/simulation/**', 'tests/**']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  regression:
+    name: Backend rounds from ${{ matrix.first }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      max-parallel: 15
+      matrix:
+        first: [1, 9, 17, 25, 33, 41, 49, 57, 65, 73, 81, 89, 97, 105, 113]
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -r requirements.txt -r requirements-backup.txt -r requirements-cloud.txt
+      - name: Eight full simulated regressions with fresh databases
+        run: |
+          python scripts/simulation/run_backend.py . --rounds 8 \
+            --first-round ${{ matrix.first }} --workers 2 \
+            --output "$RUNNER_TEMP/yuno-backend-simulation"
