@@ -18,6 +18,8 @@ def test_transfer_real_libsql_roundtrip_and_refuse_nonempty_target(tmp_path, mon
     with closing(sqlite3.connect(source)) as conn:
         conn.execute("UPDATE sqlite_sequence SET seq=100 WHERE name='users'")
         conn.commit()
+    # A cloud can enforce foreign keys despite a client's PRAGMA OFF request.
+    monkeypatch.setattr(transfer.remote_db, 'connect', lambda _: enforced_connection(libsql, remote_file))
     transfer.import_to_remote(source, photos)
     with pytest.raises(ValueError, match='empty'):
         transfer.import_to_remote(source, photos)
@@ -33,3 +35,11 @@ def test_transfer_real_libsql_roundtrip_and_refuse_nonempty_target(tmp_path, mon
         assert conn.execute('SELECT id,pw_hash FROM users').fetchone() == (7, 'private-hash')
         assert conn.execute("SELECT seq FROM sqlite_sequence WHERE name='users'").fetchone()[0] == 100
         assert json.loads(conn.execute('SELECT draft_json FROM oneclick_drafts').fetchone()[0])['photos'] == ['a.png', 'b.png']
+
+
+def enforced_connection(driver, path):
+    conn = Connection(driver.connect(str(path)))
+    conn.execute('PRAGMA foreign_keys=ON')
+    original = conn.execute
+    conn.execute = lambda sql, params=(): original('SELECT 1') if sql == 'PRAGMA foreign_keys=OFF' else original(sql, params)
+    return conn

@@ -17,6 +17,41 @@ def quoted(name):
     return '"' + name.replace('"', '""') + '"'
 
 
+def migration_script(source):
+    """Create parents before children even when cloud FK enforcement stays on."""
+    tables = {name: sql for name, sql in source.execute(
+        "SELECT name,sql FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")}
+    pending = {name: {row[2] for row in source.execute('PRAGMA foreign_key_list(' + quoted(name) + ')')
+                      if row[2] in tables and row[2] != name} for name in tables}
+    ordered = []
+    while pending:
+        ready = sorted(name for name, required in pending.items() if required.issubset(ordered))
+        if not ready:
+            raise ValueError('Cyclic foreign keys require a separately validated migration')
+        for name in ready:
+            ordered.append(name)
+            del pending[name]
+    dump = list(source.iterdump())
+    rows = {name: [] for name in ordered}
+    sequence, after = [], []
+    for statement in dump:
+        if statement.startswith('INSERT INTO "sqlite_sequence"') or statement.startswith('DELETE FROM "sqlite_sequence"'):
+            sequence.append(statement)
+        elif statement.startswith('INSERT INTO '):
+            for name in ordered:
+                if statement.startswith('INSERT INTO ' + quoted(name) + ' '):
+                    rows[name].append(statement)
+                    break
+            else:
+                raise ValueError('Unexpected table in SQLite export')
+        elif not (statement.startswith('CREATE TABLE ') or statement in ('BEGIN TRANSACTION;', 'COMMIT;')):
+            after.append(statement)
+    statements = ['BEGIN IMMEDIATE;'] + [tables[name] + ';' for name in ordered]
+    for name in ordered:
+        statements.extend(rows[name])
+    return '\n'.join(statements + sequence + after + ['COMMIT;'])
+
+
 def copy_database(source, destination):
     existing = destination.execute(
         "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'").fetchall()
@@ -25,14 +60,17 @@ def copy_database(source, destination):
     if isinstance(source, sqlite3.Connection) and isinstance(destination, remote_db.Connection):
         # A small migration can be sent as one official SDK batch, keeping the
         # write transaction on the server instead of holding it over many RPCs.
-        script = '\n'.join(source.iterdump())
+        script = migration_script(source)
         if len(script.encode()) > 8 * 1024 * 1024:
             raise ValueError('Use the official SQLite upload path for imports above 8 MiB SQL')
         destination.execute('PRAGMA foreign_keys=OFF')
         try:
             destination.executescript(script)
         except BaseException:
-            destination.rollback()
+            try:
+                destination.rollback()
+            except Exception:
+                pass  # Remote execute_batch may already have rolled back.
             raise
         for (table,) in source.execute("SELECT name FROM sqlite_master WHERE type='table'"):
             expected = source.execute('SELECT COUNT(*) FROM ' + quoted(table)).fetchone()[0]
