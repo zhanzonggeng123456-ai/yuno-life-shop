@@ -132,7 +132,7 @@ flutter drive --profile --keep-app-running --no-uninstall-first \
 
 ## 当前界面版本
 
-当前正常试用包为 0.4.4（9），进一步修复加载页与市场页异步刷新在 debug 模式返回 Future 导致的异常，实测见 [验收记录](NATIVE_ACCEPTANCE.md)。
+当前正常试用包为 0.4.5（10），修复断网退出、非 JSON 401 会话清理、异常响应处理与个人中心版本显示；保留 0.4.4 的异步刷新修复，实测见 [验收记录](NATIVE_ACCEPTANCE.md)。
 界面沿用按用户给定 Muse 参考及手机照片调整的 0.4.1 排版，排版说明见
 [NATIVE_UI_0_4_1.md](NATIVE_UI_0_4_1.md)。`GET /me` 额外返回当前用户的 `following` 商品列表；
 订单读取中的 `listing` 字段包含商品标题与照片，便于原生订单卡片展示。以上均为读取扩展。
@@ -153,7 +153,7 @@ YUNO_ANDROID_NDK_VERSION=27.1.12297006 flutter build apk --debug --no-pub \
 
 此选项仅用于已验证的本地验收工具链，Gradle 统一配置本项目和 Android 插件，开启 NDK 27 的 flexible page sizes。
 默认仍为 NDK 28.2；不改共享 SDK 或依赖源码。16 KB 支持依据见 [Android 官方说明](https://developer.android.com/guide/practices/page-sizes)。
-当前 APK `outputs/yuno-life-0.4.4-arm64-debug.apk` 的 ZIP 对齐与签名已检查，原生库与此前 ELF 对齐通过的版本哈希一致。
+当前 APK `outputs/yuno-life-0.4.5-arm64-debug.apk` 的 ZIP 对齐与签名已检查，最终包内所有原生库直接解析 ELF32/ELF64，LOAD 均不低于 16 KB。
 此前自动创建分区路径要求约 7.2 GB；现已在独立 2 GiB 稀疏盘的 API 36 模拟器完成安装、启动及四组集成测试，实测系统页大小 16384。
 
 在项目根运行 `python3 mobile/tool/prepare_android_acceptance.py --run-id 新数字编号`，使用已有 SDK 镜像创建项目专属测试盘，再执行打印的启动命令。
@@ -168,3 +168,8 @@ YUNO_ANDROID_NDK_VERSION=27.1.12297006 flutter build apk --debug --no-pub \
 `integration_test/settlement_flow_test.dart` 补验到期结算、重复结算、流拍、预警确认与调价批准/驳回。
 启动相同的隔离角色工具时加 `--lifecycle-fixtures`；仅本轮精确卖家邮箱和指定测试商品会被准备为老库存/过期拍卖。
 该时间与库存准备属于 fixture，不是真实时间流逝，也不是生产管理接口。
+
+整 App 的需求与证据层级对照见 [NATIVE_COVERAGE.md](NATIVE_COVERAGE.md)。
+
+Android arm64 Debug 包交付前运行 `python3 mobile/tool/verify_android_app.py outputs/yuno-life-0.4.5-arm64-debug.apk`（根目录，JAVA_HOME 为已安装 JDK）。
+它同时拒绝缺 Flutter 运行库/Dart kernel 的残缺包，并检查签名和 ELF/ZIP 16 KB 对齐。若清理中间文件或本轮引擎转换缓存后增量包缺库，应使用项目 Gradle `--no-daemon --rerun-tasks :app:assembleDebug`（保持 target、target-platform、dart-defines 等本轮构建参数），随后重新检查与安装启动；不要停止其他任务的共享 daemon。

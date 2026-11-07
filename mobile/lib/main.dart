@@ -6,6 +6,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:image_picker/image_picker.dart';
 
 import 'session.dart';
+import 'app_version.dart';
 import 'labels.dart';
 import 'design.dart';
 import 'market_home.dart';
@@ -2051,7 +2052,7 @@ class ProfilePage extends StatelessWidget {
                 child: Text(session.tr('退出登录', 'ログアウト'))),
           simulation(),
           const Center(
-              child: Text('Yuno Life · 0.4.0 (5)',
+              child: Text(appVersionLabel,
                   style: TextStyle(fontSize: 11, color: YunoColors.muted))),
           const SizedBox(height: 16),
         ],
@@ -2255,10 +2256,13 @@ class _ConnectionFormState extends State<ConnectionForm> {
             onPressed: busy
                 ? null
                 : () async {
-                    setState(() => busy = true);
+                    setState(() {
+                      busy = true;
+                      error = null;
+                    });
                     try {
                       await session.setServer(control.text);
-                      widget.onSaved();
+                      if (mounted) widget.onSaved();
                     } catch (e) {
                       if (mounted) setState(() => error = failure(e));
                     } finally {

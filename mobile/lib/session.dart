@@ -54,8 +54,7 @@ class Session extends ChangeNotifier {
     baseUrl = preferences!.getString('server') ?? baseUrl;
     _token = await storage.read(key: 'session');
     if (await storage.read(key: 'session_server') != baseUrl) {
-      _token = null;
-      await storage.delete(key: 'session');
+      await clearIdentity();
     }
     await bootstrap();
   }
@@ -109,9 +108,17 @@ class Session extends ChangeNotifier {
   }
 
   Future<void> signOut({bool remote = true}) async {
-    if (remote && signedIn) {
-      await post('/logout', {});
+    try {
+      if (remote && signedIn) {
+        await post('/logout', {});
+      }
+    } finally {
+      // Network failure must not keep the user signed in on this device.
+      await clearIdentity();
     }
+  }
+
+  Future<void> clearIdentity() async {
     _token = null;
     me = null;
     await storage.delete(key: 'session');
@@ -131,6 +138,10 @@ class Session extends ChangeNotifier {
         if (_token != null) 'Authorization': 'Bearer $_token',
       };
   Future<Json> decode(http.Response response) async {
+    // A gateway may return HTML or an empty body for 401 responses.
+    if (response.statusCode == 401 && _token != null) {
+      await clearIdentity();
+    }
     dynamic data;
     try {
       data = jsonDecode(utf8.decode(response.bodyBytes));
@@ -138,15 +149,11 @@ class Session extends ChangeNotifier {
       throw ApiError(response.statusCode, 'invalid_response');
     }
     if (response.statusCode >= 400) {
-      if (response.statusCode == 401 && _token != null) {
-        _token = null;
-        me = null;
-        await storage.delete(key: 'session');
-        notifyListeners();
-      }
       throw ApiError(
         response.statusCode,
-        '${data['error'] ?? 'request_rejected'}',
+        data is Map
+            ? '${data['error'] ?? 'request_rejected'}'
+            : 'request_rejected',
       );
     }
     if (data is! Map<String, dynamic>) {
