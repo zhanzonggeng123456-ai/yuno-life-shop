@@ -5,9 +5,9 @@ plugins {
 }
 
 android {
-    namespace = "com.yunolife.shop"
+    namespace = "com.yunolife.yuno_life"
     compileSdk = flutter.compileSdkVersion
-    ndkVersion = "27.1.12297006"
+    ndkVersion = System.getenv("YUNO_ANDROID_NDK_VERSION") ?: "28.2.13676358"
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
@@ -15,9 +15,7 @@ android {
     }
 
     defaultConfig {
-        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
-        applicationId = if (providers.environmentVariable("YUNO_QA").orNull == "true")
-            "com.yunolife.shop.qa" else "com.yunolife.shop"
+        applicationId = "com.yunolife.shop.dev"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion
@@ -32,7 +30,6 @@ android {
 
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
             // Signing with the debug keys for now, so `flutter run --release` works.
             signingConfig = signingConfigs.getByName("debug")
         }

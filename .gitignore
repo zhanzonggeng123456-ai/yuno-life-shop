@@ -21,3 +21,6 @@ uploads/
 *.yuno-backup
 *.backup-key
 .yuno-backups/
+
+# Local build and acceptance evidence
+/outputs/
