@@ -16,7 +16,7 @@
 | iOS 启动 | 当前 0.4.5（10）正常 Release 安装、启动及版本读回通过；0.4.4 真实首页截图保留；历史 0.4.0 Profile 交易测试也已通过。历史签名/信任拒绝记录保留在下方 |
 | iPhone 原生流程测试 | 0.4.0 主要业务场景 68 秒通过；0.4.1 追加角色场景 67 秒通过，0.4.2 扩展为 84 秒通过，包含配送履约、退款/争议、买断入库、服务处理、原生登录/必填异常及 17 后台读取分区。媒体与文字输入为测试入口；硬件、系统权限及未执行的后台写操作不计通过，详见本记录最新小节 |
 | Android 构建 | 当前 0.4.5（10）调试包已构建、签名与 16 KB 对齐验证通过，见最新小节。历史：仅保留历史 0.1.0（2）APK；当前 0.4.0 构建尝试补齐 NDK 28.2 后磁盘只剩约 197 MiB，已主动停止本项目 Gradle 并清除新增 NDK 28，保留原有 NDK 27。新版未构建成功，未计通过 |
-| Android 运行 | 独立 API 36 / 16 KB 模拟器当前 0.4.5（10）安装启动通过；历史 0.4.4 四组主业务/角色/拒绝恢复/结算流程分别 65/76/33/24 秒通过。稀疏测试数据盘及复用已安装 APK 的测试方式见最新小节，物理 Android 设备未测 |
+| Android 运行 | 独立 API 36 / 16 KB 模拟器当前 0.4.5（10）安装启动通过；当前 0.4.5 四组主业务/角色/拒绝恢复/结算流程分别 69/75/33/24 秒通过；历史 0.4.4 证据保留。稀疏测试数据盘及复用已安装 APK 的测试方式见最新小节，物理 Android 设备未测 |
 | 相机/相册硬件 | 未验收，测试 picker 不能替代硬件测试 |
 | 商店/真实支付/真实物流 | 明确不做，界面均作模拟说明 |
 
@@ -301,3 +301,23 @@ Android 当前包、真实相机/相册/系统键盘仍无通过证据；未执�
 
 
 修复构建后的最终 Android 0.4.5（10）已在新建独立 API 36 / 16384 页大小模拟器安装、冷启动并核对[实际原生首页](previews/android-market-0.4.5.png)，不再是系统桌面。版本读回 versionName=0.4.5、versionCode=10。证据 `android-0.4.5-install.log`、`android-0.4.5-launch.log`、`android-0.4.5-version.log`、`android-0.4.5-page-size.log`、`android-0.4.5-smoke.log`。本轮模拟器与可丢弃数据盘已停止/清理，空间约 2.3 GiB；8003/Host 未启动，正常 8002 保持运行。当前 APK 和最新 iPhone 正常 Release 保留；未修改或停止 Nino、共享证书/描述文件。
+
+
+#### 0.4.5 当前源码四组原生业务复验
+
+在独立 API 36 / PAGE_SIZE=16384 模拟器复用已核验正常 APK，通过 Flutter attach / hot restart 加载当前 6170f96 生产源码与集成测试入口；四组依次通过：主业务 **69 秒**、角色 **75 秒**、拒绝恢复 **33 秒**、结算 **24 秒**。日志为 `outputs/full-0.4.5-{native,roles,closure,settlement}-flow.log`。这是本次 0.4.5 新结果，历史版本证据不改写。
+
+使用独立 `data/acceptance-full-1794025826` 数据库和上传目录、独立数字 run ID 与受限角色/时间 fixture；媒体与输入仍为测试通道，不算真实硬件相机、相册或键盘。编排器在第一组通过后 PTY 分离等待出错，保留 `full-0.4.5-run.log`，恢复为手动分离并顺序执行其余组，不将编排错误计为产品失败或通过。四组均有独立驱动成功日志。
+
+测试完成已重新安装正常 0.4.5 APK，冷启动并检查实际首页截图 `outputs/full-0.4.5-restored-phone.png`，版本记录 `outputs/full-0.4.5-restored-version.log`。仅停止本轮 8003、fixture Host、磁盘保护及独立模拟器，删除本轮可丢弃数据盘；正常 8002、iPhone Release 与当前 APK 保留。当前 iPhone 硬件缺口仍未记通过。
+
+
+#### iPhone 官方 XCTest 硬件探针：未通过，保留阻断证据
+
+新增 `mobile/tool/hardware_probe` 独立只读 UI 测试工程生成器。目标只调用官方 XCUIApplication(bundleIdentifier:) 读取已安装 Yuno App 的可访问性与截图，不修改正常 Runner 工程、账号、服务器或权限，不通过 Device Hub/iPhone 镜像。用本机已有 wildcard 开发描述文件与签名构建测试 Runner 成功，未使用 `-allowProvisioningUpdates` 或创建新证书/描述文件。初次手动签名配置被 Xcode 拒绝（已有文件为 Xcode managed），改为自动选择现有文件后成功。
+
+实际执行在测试方法开始前失败：`The test runner failed to initialize for UI testing` / `Timed out while enabling automation mode`，60 秒。证据 `outputs/hardware-probe-build-auto.log`、`outputs/hardware-probe-read.log` 及对应 xcresult。测试会话日志显示 Runner 已获授权、支持 automation mode，随后在启用自动化阶段超时；只读设备状态确认 Developer Mode enabled、passcodeRequired=false、unlockedSinceBoot=true。用户确认「UI 自动化本来已开启，未出现提示」。因此不能将失败归因为缺少用户授权或声称已有确定根因，不重复要求同一开关。
+
+未执行相机/相册/HEIC/系统键盘操作，也未取得探针界面截图，全部保持未通过。已重新启动正常 0.4.5 Yuno App；正常服务器/账号设置未改。该路径需设备/Xcode 自动化服务恢复后才能继续，不能绕过系统限制。
+
+复现（需已有可用开发签名，先检查设备占用）：`YUNO_DEVELOPMENT_TEAM=<现有团队> ruby mobile/tool/hardware_probe/create.rb outputs/hardware-probe`；再对生成工程执行 `xcodebuild build-for-testing` 和 `test-without-building`，使用独立 derivedData/resultBundle 路径，不传 `-allowProvisioningUpdates`。仅构建成功不是硬件通过。
