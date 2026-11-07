@@ -1,0 +1,18 @@
+{
+  "passed": [
+    "native registration + Android secure storage reread",
+    "native ten-photo controls + limit + AI no invented market price",
+    "native publish confirmation + ten-photo product detail",
+    "native messaging + follow/unfollow",
+    "native buy + simulated payment idempotency + delivery lifecycle + review",
+    "all three native service reservation/confirm/start/complete flows",
+    "native platform buyback full lifecycle + native date/time picker",
+    "native auction creation + competing proxy bids + settlement",
+    "native dispute decision + simulated refund lifecycle",
+    "five native destinations + Chinese/Japanese/system languages",
+    "actual rear camera capture + OS album selection + Vivo IME text entry (not uploaded)"
+  ],
+  "fixture_server": "isolated-loopback",
+  "production_data_mutations": false,
+  "cross_network_tested": false
+}

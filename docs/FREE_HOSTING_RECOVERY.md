@@ -1,6 +1,6 @@
 # 免费托管、独立备份与恢复
 
-当前状态（2026-11-06，America/New_York）：**Render Free + Turso Free 已上线，独立每日备份已配置，首次工作流与恢复验收通过**。正式地址为 **https://yuno-life-shop-free.onrender.com**。iQOO 8 已升级 0.2.2 (4)，切换到新地址并验证冷启动后配置保留。旧 Railway 试用实例已停止，服务与旧数据卷保留，不再接收写入。换网络实测仍按用户要求暂缓。未开通付费、未绑定支付方式、未操作 Nino。
+上线验收（2026-11-06，America/New_York）：**Render Free + Turso Free 已上线，独立每日备份已配置，首次手动工作流与恢复验收通过**。正式地址为 **https://yuno-life-shop-free.onrender.com**。iQOO 8 已升级 0.2.2 (4)，切换到新地址并验证冷启动后配置保留。旧 Railway 试用实例已停止，服务与旧数据卷保留，不再接收写入。后续真机换网读取结果见 [Android 验收记录](qa/ANDROID_DEVICE.md)。
 
 ## 本次实际上线与验收
 

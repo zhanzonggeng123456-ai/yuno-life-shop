@@ -39,7 +39,7 @@ Android Keystore / iOS Keychain 支持的安全存储中。
 flutter build apk --release --target-platform android-arm64 --dart-define=YUNO_SERVER=http://电脑局域网IP:8000
 ```
 
-当前工程使用调试签名生成内部试用包。版本为 `0.2.1+3`，
+当前工程使用调试签名生成内部试用包。版本为 `0.2.2+4`，
 包名为 `com.yunolife.shop`。商店签名、上架和真实支付不在本次范围。
 
 Android 依赖固定了兼容版本，以复用现有 NDK 27 工具链。
@@ -57,6 +57,8 @@ flutter build ios --simulator --debug --dart-define=YUNO_SERVER=http://127.0.0.1
 相机、相册、本地网络用途说明已配置。模拟器的相机可用性由宿主环境决定。
 
 ## 验证
+
+最新验收见 [120 轮模拟测试记录](../docs/qa/SIMULATION_120.md) 和 [iQOO 8 真机与换网记录](../docs/qa/ANDROID_DEVICE.md)。独立 Android 验收包的完整操作见 [实体 Android 验收](../docs/DEVICE_QA.md)。
 
 ```sh
 flutter analyze

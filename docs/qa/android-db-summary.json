@@ -1,0 +1,101 @@
+{
+  "base_commit": "f528017b805168fdaf2542df648a8b14a2741b7b",
+  "device": "iQOO 8 / V2136A",
+  "android": "14",
+  "version": "0.2.2+4",
+  "qa_apk_sha256": "F5F5BA7610765298590372C7D7F6286362BA8B646EACD7438441E725AE4D0B1C",
+  "duration": "08:56",
+  "data_scope": "isolated QA database; not public production",
+  "states": {
+    "oneclick_drafts": [
+      [
+        "published",
+        2
+      ],
+      [
+        "recognized",
+        1
+      ]
+    ],
+    "listings": [
+      [
+        "active",
+        2
+      ],
+      [
+        "reserved",
+        1
+      ],
+      [
+        "sold",
+        3
+      ]
+    ],
+    "orders": [
+      [
+        "completed",
+        1
+      ],
+      [
+        "pending_payment",
+        1
+      ],
+      [
+        "refunded",
+        1
+      ]
+    ],
+    "deliveries": [
+      [
+        "confirmed",
+        1
+      ]
+    ],
+    "service_orders": [
+      [
+        "completed",
+        3
+      ]
+    ],
+    "buybacks": [
+      [
+        "completed",
+        1
+      ]
+    ],
+    "auctions": [
+      [
+        "ended_sold",
+        1
+      ]
+    ],
+    "refunds": [
+      [
+        "decided",
+        1
+      ]
+    ],
+    "disputes": [
+      [
+        "decided",
+        1
+      ]
+    ]
+  },
+  "service_kinds": [
+    [
+      "cleaning_home",
+      "completed"
+    ],
+    [
+      "transport_small",
+      "completed"
+    ],
+    [
+      "local_delivery",
+      "completed"
+    ]
+  ],
+  "auction_price": "asserted 1900 in device test",
+  "cross_network_tested": false
+}

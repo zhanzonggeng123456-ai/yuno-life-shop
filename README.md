@@ -12,6 +12,7 @@ AI 驱动、全品类、支持多种交易模式的中古交易平台。
 构建、手机连接和验收方法见 [mobile/README.md](mobile/README.md)。
 接口说明见 [docs/MOBILE_API.md](docs/MOBILE_API.md)。
 验收记录与试用限制见 [docs/MOBILE_ACCEPTANCE.md](docs/MOBILE_ACCEPTANCE.md)。
+最新 [120 轮隔离模拟回归](docs/qa/SIMULATION_120.md) 与 [iQOO 8 真机及换网验收](docs/qa/ANDROID_DEVICE.md) 已通过。
 当前公网后端为 [YUNO 免费服务](https://yuno-life-shop-free.onrender.com)，Android 内测版 0.2.2。
 非试用型免费托管、每日独立加密备份和实际恢复验收见 [docs/FREE_HOSTING_RECOVERY.md](docs/FREE_HOSTING_RECOVERY.md)。
 此前 Railway 试用记录保留在 [docs/PUBLIC_DEPLOYMENT.md](docs/PUBLIC_DEPLOYMENT.md)，旧活动部署已停止。
@@ -51,12 +52,7 @@ YUNO_SEED_BUYER_PASSWORD=你设的口令 .venv/bin/python -m app.seed
 
 ```bash
 .venv/bin/python -m pytest tests/ -q
-# 97 项全过:27 项原版 + 12 项移植第 1 阶段(导航/语言/服务/规则)
-# + 14 项移植第 2 阶段(多图/鉴定两轴/估价) + 18 项移植第 3 阶段
-# (市场搜索/双榜/后台任务) + 26 项商业优化(权限/校验/限流/审计/幂等)
-# 另有 15 组确定性逻辑各 100 次循环验证(估价/鉴定/缓存/封面/服务定价/
-# 语言映射/支付幂等/终态/限流/输入校验/任务完成态),市场搜索循环用
-# 注入样本与缓存、零真实联网
+# 当前完整后端套件共 120 项。批量回归执行方式见 docs/qa/SIMULATION_120.md。
 ```
 
 ## 已实现(第一阶段 12 项)

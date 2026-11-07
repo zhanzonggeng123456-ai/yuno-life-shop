@@ -1,3 +1,6 @@
+// Opt-in test entry outside test/: its plugin state is always mocked.
+// ignore_for_file: invalid_use_of_visible_for_testing_member
+
 import 'dart:convert';
 import 'dart:io';
 
@@ -94,8 +97,9 @@ void main() {
         }
         throw StateError('Isolated simulation server did not start: $logs');
       },
-      report: (result) =>
-          print('YUNO_SIM_RESULT ${jsonEncode({'round': round, ...result})}'),
+      report: (result) => stdout.writeln(
+        'YUNO_SIM_RESULT ${jsonEncode({'round': round, ...result})}',
+      ),
     );
   }
 }
