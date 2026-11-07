@@ -14,6 +14,7 @@ const fieldLabels = <String, List<String>>{
   'desc_ja': ['日文说明', '日本語説明'],
   'desc_zh': ['中文说明', '中国語説明'],
   'price': ['售价（日元，含税）', '価格（円・税込）'],
+  'effective_price': ['当前交易价（日元，含税）', '現在の取引価格（円・税込）'],
   'category_slug': ['分类', 'カテゴリ'],
   'condition_grade': ['成色', '状態'],
   'region': ['地区', '地域'],

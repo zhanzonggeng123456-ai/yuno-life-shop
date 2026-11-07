@@ -132,7 +132,7 @@ flutter drive --profile --keep-app-running --no-uninstall-first \
 
 ## 当前界面版本
 
-当前正常试用包为 0.4.5（10），修复断网退出、非 JSON 401 会话清理、异常响应处理与个人中心版本显示；保留 0.4.4 的异步刷新修复，实测见 [验收记录](NATIVE_ACCEPTANCE.md)。
+当前正常试用包为 0.4.6（11），补齐详情页当前交易价的中日文标签；保留 0.4.5 会话/错误处理与 0.4.4 异步刷新修复。本轮内部试用验收已闭环，版本与证据范围见 [验收记录](NATIVE_ACCEPTANCE.md) 和 [真实 iPhone 硬件实测](NATIVE_HARDWARE_ACCEPTANCE.md)。
 界面沿用按用户给定 Muse 参考及手机照片调整的 0.4.1 排版，排版说明见
 [NATIVE_UI_0_4_1.md](NATIVE_UI_0_4_1.md)。`GET /me` 额外返回当前用户的 `following` 商品列表；
 订单读取中的 `listing` 字段包含商品标题与照片，便于原生订单卡片展示。以上均为读取扩展。
@@ -153,7 +153,7 @@ YUNO_ANDROID_NDK_VERSION=27.1.12297006 flutter build apk --debug --no-pub \
 
 此选项仅用于已验证的本地验收工具链，Gradle 统一配置本项目和 Android 插件，开启 NDK 27 的 flexible page sizes。
 默认仍为 NDK 28.2；不改共享 SDK 或依赖源码。16 KB 支持依据见 [Android 官方说明](https://developer.android.com/guide/practices/page-sizes)。
-当前 APK `outputs/yuno-life-0.4.5-arm64-debug.apk` 的 ZIP 对齐与签名已检查，最终包内所有原生库直接解析 ELF32/ELF64，LOAD 均不低于 16 KB。
+当前 APK `outputs/yuno-life-0.4.6-arm64-debug.apk` 的运行库、Dart assets、ZIP 对齐与签名已检查，最终包内所有原生库直接解析 ELF32/ELF64，LOAD 均不低于 16 KB。
 此前自动创建分区路径要求约 7.2 GB；现已在独立 2 GiB 稀疏盘的 API 36 模拟器完成安装、启动及四组集成测试，实测系统页大小 16384。
 
 在项目根运行 `python3 mobile/tool/prepare_android_acceptance.py --run-id 新数字编号`，使用已有 SDK 镜像创建项目专属测试盘，再执行打印的启动命令。
@@ -171,5 +171,7 @@ YUNO_ANDROID_NDK_VERSION=27.1.12297006 flutter build apk --debug --no-pub \
 
 整 App 的需求与证据层级对照见 [NATIVE_COVERAGE.md](NATIVE_COVERAGE.md)。
 
-Android arm64 Debug 包交付前运行 `python3 mobile/tool/verify_android_app.py outputs/yuno-life-0.4.5-arm64-debug.apk`（根目录，JAVA_HOME 为已安装 JDK）。
+Android arm64 Debug 包交付前运行 `python3 mobile/tool/verify_android_app.py outputs/yuno-life-0.4.6-arm64-debug.apk`（根目录，JAVA_HOME 为已安装 JDK）。
 它同时拒绝缺 Flutter 运行库/Dart kernel 的残缺包，并检查签名和 ELF/ZIP 16 KB 对齐。若清理中间文件或本轮引擎转换缓存后增量包缺库，应使用项目 Gradle `--no-daemon --rerun-tasks :app:assembleDebug`（保持 target、target-platform、dart-defines 等本轮构建参数），随后重新检查与安装启动；不要停止其他任务的共享 daemon。
+
+安装/启动 smoke 可给 `prepare_android_acceptance.py` 传 `--data-size-mib 1024`；完整业务验收仍默认 2048。`--avd-home` 可指向本项目内已有测试卷的子目录，余量检查针对该测试卷，模拟器自身兼容性检查保留。本轮主盘空间不足时，在确认内存余量后使用专属 4 GiB RAM 卷、1 GiB 数据盘完成最终 0.4.6 安装冷启动，随后释放 RAM 卷；未使用 Nino AVD、未禁用空间检查。原始配置与操作脚本保留在 `outputs/smoke-0.4.6-ram.py`，结果见最新验收小节。

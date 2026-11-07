@@ -2,7 +2,8 @@ require 'xcodeproj'
 require 'fileutils'
 root = File.expand_path(ARGV.fetch(0))
 FileUtils.mkdir_p(root)
-FileUtils.cp(File.join(__dir__, 'Probe.swift'), File.join(root, 'Probe.swift'))
+source = ARGV[1] == '--control' ? 'Control.swift' : 'Probe.swift'
+FileUtils.cp(File.join(__dir__, source), File.join(root, 'Probe.swift'))
 p = Xcodeproj::Project.new(File.join(root, 'YunoHardwareProbe.xcodeproj'))
 t = p.new_target(:ui_test_bundle, 'YunoHardwareProbe', :ios, '15.0')
 f = p.main_group.new_file('Probe.swift')
