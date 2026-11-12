@@ -1,6 +1,6 @@
 # TestFlight 交付记录
 
-2026-11-11（America/New_York），Yuno Life **0.4.7（12）已成功上传 TestFlight**。Apple 页面已出现构建 12，状态为“准备提交”。尚未发送测试邀请、提交外部 Beta 审核或正式 App Store 审核。
+2026-11-11（America/New_York），Yuno Life **0.4.7（12）已成功上传 TestFlight 并提交外部 Beta 审核**。Apple 外部群组页面已显示构建 12“正在等待审核”。尚未发送测试邀请或提交正式 App Store 审核。
 
 - App ID：`6833709556`；Bundle ID：`com.yunolife.shop`。
 - [TestFlight 管理页面](https://appstoreconnect.apple.com/teams/aedcac6f-5d95-4898-9a10-0e0ad2d9fb23/apps/6833709556/testflight/ios)。主语言日语，App 支持中日双语。
@@ -28,6 +28,16 @@ IPA 深度严格签名校验通过，标识、版本、构建号均读回一致�
 
 本次是 TestFlight 上传，支付与物流仍为模拟，并非正式商店上线。正式日本上架所需的运营资料、账号删除和用户内容治理等另行完成，不记为已通过。
 
-旧 0.4.6 正常包及验收证据保留，不冒称在 0.4.7/TestFlight 全组重跑硬件场景。未创建生产测试账号、写入客户数据、操作设备或改动 Nino、经营游戏及正常本地服务。
+旧 0.4.6 正常包及验收证据保留，不冒称在 0.4.7/TestFlight 全组重跑硬件场景。上传阶段未创建生产测试账号、写入客户数据、操作设备或改动 Nino、经营游戏及正常本地服务。
 
 用于解压和签名的独立 2 GiB RAM 盘已卸载，IPA、归档和本轮日志均保留在本项目 `outputs/`。
+
+## 外部 Beta 审核提交
+
+用户随后明确要求提交 TestFlight 外部测试审核。按 Apple 的前置要求，已创建空的内部群组 `Yuno Life Internal`（未启用自动分发）及外部群组 `Yuno Life External Beta`，并在外部群组送审流程选择构建 12。未邀请测试员或启用公开链接。
+
+已在公网通过正常注册接口创建普通权限的专用 Apple 审核测试账号，独立登录和认证 `/api/v2/me` 均成功；没有使用管理员或客户账号。凭据仅保存在被 Git 忽略、权限为 0600 的 `outputs/testflight-review-account.json`，不写入文档或提交 Git。无凭据的验证结果保存在 `outputs/testflight-review-account-proof.json`。
+
+已在审核表单填写日中双语 Beta 描述及专用登录信息，说明支付与物流为模拟。用户提供审核联系资料后，已补齐姓名、电话（按美国区号 +1 填写）、电子邮箱及同一反馈邮箱，并点击“提交以供审核”。Apple 返回的外部群组页面显示 1 个构建版本，0.4.7（12）状态为“正在等待审核”。这证明已提交，不代表审核通过。
+
+未勾选自动通知测试员，群组仍为 0 个测试员，未启用公开链接。提交截图为 `outputs/testflight-external-review-submitted.png`，无凭据的结构化记录为 `outputs/testflight-external-review-submission.json`。联系人私密资料和审核账号密码不提交 Git。
