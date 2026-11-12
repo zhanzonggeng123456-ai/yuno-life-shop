@@ -1,7 +1,7 @@
 name: yuno_life
 publish_to: none
 description: Yuno Life native secondhand marketplace.
-version: 0.4.7+12
+version: 0.4.8+13
 environment:
   sdk: '>=3.5.0 <4.0.0'
 dependencies:
@@ -25,6 +25,7 @@ flutter:
   uses-material-design: true
 
   assets:
+    - assets/brand/yuno-life-logo.png
     - assets/fonts/OFL-NotoSerifSC.txt
   fonts:
     - family: YunoSerif

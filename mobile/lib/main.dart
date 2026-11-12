@@ -45,8 +45,22 @@ class _YunoAppState extends State<YunoApp> {
             future: ready,
             builder: (context, snapshot) {
               if (snapshot.connectionState != ConnectionState.done) {
-                return const Scaffold(
-                  body: Center(child: CircularProgressIndicator()),
+                return Scaffold(
+                  body: Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Image.asset(
+                          'assets/brand/yuno-life-logo.png',
+                          width: 240,
+                          height: 240,
+                          semanticLabel: 'Yuno Life',
+                        ),
+                        const SizedBox(height: 24),
+                        const CircularProgressIndicator(),
+                      ],
+                    ),
+                  ),
                 );
               }
               if (snapshot.hasError) {
@@ -57,12 +71,11 @@ class _YunoAppState extends State<YunoApp> {
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          const Text(
-                            'Yuno Life',
-                            style: TextStyle(
-                              fontSize: 32,
-                              fontWeight: FontWeight.bold,
-                            ),
+                          Image.asset(
+                            'assets/brand/yuno-life-logo.png',
+                            width: 200,
+                            height: 200,
+                            semanticLabel: 'Yuno Life',
                           ),
                           const SizedBox(height: 24),
                           Text(

@@ -1,4 +1,4 @@
-name: Native 0.4.7 validation
+name: Native iOS validation and archive
 on:
   push:
     branches: [main]

@@ -1,5 +1,7 @@
 # TestFlight 交付记录
 
+2026-11-12（America/New_York）复查：Apple 外部群组页面已显示 **0.4.7（12）“已批准”**，TestFlight 外部 Beta 审核通过。当前外部群组仍为 0 个测试员，未发送邀请或启用公开链接；这不代表正式 App Store 上架审核通过。批准截图与无凭据记录保存在 `outputs/testflight-external-review-approved.png` 和 `outputs/testflight-external-review-approved.json`。
+
 2026-11-11（America/New_York），Yuno Life **0.4.7（12）已成功上传 TestFlight 并提交外部 Beta 审核**。Apple 外部群组页面已显示构建 12“正在等待审核”。尚未发送测试邀请或提交正式 App Store 审核。
 
 - App ID：`6833709556`；Bundle ID：`com.yunolife.shop`。
