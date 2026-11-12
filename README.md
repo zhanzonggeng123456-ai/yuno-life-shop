@@ -4,6 +4,12 @@ AI 驱动、全品类、支持多种交易模式的中古交易平台。
 首期运营区域:埼玉县坂户市,后续可扩展至鹤岛、川越、东松山。
 货币 JPY,时区 Asia/Tokyo。
 
+## 原生手机 App（Flutter）
+
+新增 `mobile/` iOS / Android 原生界面与 `/api/v1` JSON 接口，App 不使用 WebView。
+实现及构建说明见 [docs/NATIVE_APP.md](docs/NATIVE_APP.md)，实际验证范围与阻塞项见
+[docs/NATIVE_ACCEPTANCE.md](docs/NATIVE_ACCEPTANCE.md)。原有业务模块与 HTML 路由保持兼容。
+
 ## 一条命令启动
 
 ### 原生手机 App
@@ -13,7 +19,7 @@ AI 驱动、全品类、支持多种交易模式的中古交易平台。
 接口说明见 [docs/MOBILE_API.md](docs/MOBILE_API.md)。
 验收记录与试用限制见 [docs/MOBILE_ACCEPTANCE.md](docs/MOBILE_ACCEPTANCE.md)。
 最新 [120 轮隔离模拟回归](docs/qa/SIMULATION_120.md) 与 [iQOO 8 真机及换网验收](docs/qa/ANDROID_DEVICE.md) 已通过。
-当前公网后端为 [YUNO 免费服务](https://yuno-life-shop-free.onrender.com)，Android 内测版 0.2.2。
+当前公网后端为 [YUNO 免费服务](https://yuno-life-shop-free.onrender.com)，历史 Android 云端内测版 0.2.2。统一客户端候选为 0.4.7（12），使用兼容新增的 `/api/v2`；原 `/api/v1` 和云存储/备份保留。合并与分发状态见 [合并记录](docs/NATIVE_CLOUD_INTEGRATION.md)。
 非试用型免费托管、每日独立加密备份和实际恢复验收见 [docs/FREE_HOSTING_RECOVERY.md](docs/FREE_HOSTING_RECOVERY.md)。
 此前 Railway 试用记录保留在 [docs/PUBLIC_DEPLOYMENT.md](docs/PUBLIC_DEPLOYMENT.md)，旧活动部署已停止。
 实现要求保留在 [CODEX_APP_BRIEF.md](CODEX_APP_BRIEF.md)。

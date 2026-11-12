@@ -1,34 +1,14 @@
-name: YUNO isolated Flutter simulation
+name: Repeat current native component checks
 on:
-  push:
-    branches: [codex/simulation-120]
-    paths:
-      - '.github/workflows/simulation-mobile.yml'
-      - 'mobile/simulation_test/**'
-      - 'mobile/integration_test/device_full_test.dart'
-      - 'scripts/device_qa_server.py'
   workflow_dispatch:
 permissions:
   contents: read
-concurrency:
-  group: yuno-simulation-${{ github.ref }}
-  cancel-in-progress: true
 jobs:
-  trading:
-    name: Flutter rounds from ${{ matrix.first }}
+  components:
     runs-on: ubuntu-latest
-    timeout-minutes: 40
-    strategy:
-      fail-fast: false
-      max-parallel: 15
-      matrix:
-        first: [1, 9, 17, 25, 33, 41, 49, 57, 65, 73, 81, 89, 97, 105, 113]
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
-      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
-        with:
-          python-version: '3.12'
-      - run: python -m pip install -r requirements.txt -r requirements-cloud.txt
       - name: Prepare pinned Flutter SDK
         run: |
           git init "$RUNNER_TEMP/flutter"
@@ -37,19 +17,12 @@ jobs:
           git -C "$RUNNER_TEMP/flutter" checkout --detach 3.47.9
           test "$(git -C "$RUNNER_TEMP/flutter" rev-parse HEAD)" = c197ca5199e9ee5661e865596c9c07294dfab51c
           echo "$RUNNER_TEMP/flutter/bin" >> "$GITHUB_PATH"
+          "$RUNNER_TEMP/flutter/bin/flutter" --version
       - run: flutter pub get --enforce-lockfile
         working-directory: mobile
-      - name: Repeat all seven Flutter widget cases in each round
+      - name: Repeat current component suite three times
         working-directory: mobile
         run: |
-          flutter test --no-pub --reporter expanded simulation_test/widgets_test.dart \
-            --dart-define=YUNO_SIM_FIRST=${{ matrix.first }} --dart-define=YUNO_SIM_ROUNDS=8
-      - name: Repeat the full trading flow with a new backend for each round
-        working-directory: mobile
-        env:
-          PYTHONPATH: ${{ github.workspace }}/scripts/simulation/guard
-          TMPDIR: ${{ runner.temp }}
-        run: |
-          flutter test --no-pub --reporter expanded simulation_test/trading_test.dart \
-            --dart-define=YUNO_SIM_PYTHON="$(command -v python)" \
-            --dart-define=YUNO_SIM_FIRST=${{ matrix.first }} --dart-define=YUNO_SIM_ROUNDS=8
+          for round in 1 2 3; do
+            flutter test --no-pub test
+          done

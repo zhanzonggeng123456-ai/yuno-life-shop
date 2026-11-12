@@ -1,0 +1,48 @@
+{
+  "version": "0.4.5+10",
+  "run": "1794027242",
+  "native_keyboard_registered": true,
+  "real_rear_camera": true,
+  "native_gallery": true,
+  "source_photo": {
+    "filename": "IMG_0004",
+    "format": "HEIF",
+    "width": 5712,
+    "height": 4284,
+    "device": "iPhone 16e",
+    "created_local": "2026-11-07 00:04"
+  },
+  "draft_status": "published",
+  "listing_id": 1,
+  "listing_status": "active",
+  "price": 1000,
+  "photos": [
+    {
+      "type": "public.jpeg",
+      "decodedBytes": 17280000,
+      "width": 2400,
+      "name": "b57a9828269f413995ff36ad3e6f4141.jpg",
+      "height": 1800,
+      "bytes": 1057784,
+      "sha256": "0ec9fccbc769489f5dd3ef5f75cda22892e0d4db3779a527d403b5210d3a961b"
+    },
+    {
+      "type": "public.jpeg",
+      "height": 1800,
+      "name": "d801ea03b7164ed4ab3f777928cea97e.jpg",
+      "width": 2400,
+      "decodedBytes": 17280000,
+      "bytes": 778785,
+      "sha256": "c10f1691fd334f7346a5b68caedebf14be5616b82c424e524e3e8bf1188d1f6d"
+    }
+  ],
+  "server_sessions_after_logout": 0,
+  "delivery": {
+    "version": "0.4.6+11",
+    "android_apk_sha256": "e220eeaca4e32652e351f776b59373e51c904cdadd4bb3534f557ac878333b7f",
+    "android_page_size": 16384,
+    "ios_server": "http://192.168.68.51:8002",
+    "ios_language": "zh",
+    "fixture_business_version": "0.4.5+10"
+  }
+}

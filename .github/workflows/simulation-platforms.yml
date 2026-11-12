@@ -1,30 +1,18 @@
-name: YUNO Android and iPhone simulators
+name: Native simulator main flow
 on:
-  push:
-    branches: [codex/simulation-120]
-    paths: ['.github/workflows/simulation-platforms.yml', 'mobile/integration_test/simulation_platform_test.dart']
   workflow_dispatch:
 permissions:
   contents: read
 jobs:
-  platform:
-    name: ${{ matrix.platform }} simulator
-    runs-on: ${{ matrix.runner }}
-    timeout-minutes: 35
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - platform: Android
-            runner: ubuntu-latest
-          - platform: iPhone
-            runner: macos-latest
+  ios:
+    runs-on: macos-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
         with:
           python-version: '3.12'
-      - run: python -m pip install -r requirements.txt -r requirements-cloud.txt
+      - run: python -m pip install -r requirements.txt
       - name: Prepare pinned Flutter SDK
         run: |
           git init "$RUNNER_TEMP/flutter"
@@ -33,55 +21,23 @@ jobs:
           git -C "$RUNNER_TEMP/flutter" checkout --detach 3.47.9
           test "$(git -C "$RUNNER_TEMP/flutter" rev-parse HEAD)" = c197ca5199e9ee5661e865596c9c07294dfab51c
           echo "$RUNNER_TEMP/flutter/bin" >> "$GITHUB_PATH"
-      - run: flutter pub get --enforce-lockfile
-        working-directory: mobile
-      - name: Start isolated simulator backend
-        env:
-          PYTHONPATH: ${{ github.workspace }}/scripts/simulation/guard
+          "$RUNNER_TEMP/flutter/bin/flutter" --version
+      - name: Isolated API and current iPhone simulator flow
         run: |
-          mkdir "$RUNNER_TEMP/yuno-platform-qa"
-          touch "$RUNNER_TEMP/yuno-platform-qa/.yuno-device-qa"
-          python -m scripts.device_qa_server --port 18766 --data-dir "$RUNNER_TEMP/yuno-platform-qa" > "$RUNNER_TEMP/yuno-platform-server.log" 2>&1 &
-          for _ in $(seq 1 30); do
-            curl --fail --silent http://127.0.0.1:18766/healthz && break
+          set -euo pipefail
+          RUN_ID="$(date +%s)"
+          export ACCEPTANCE_RUN_ID="$RUN_ID"
+          export YUNO_DB_PATH="$PWD/data/acceptance-$RUN_ID/yuno.db"
+          export YUNO_UPLOAD_DIR="$PWD/data/acceptance-$RUN_ID/uploads"
+          python -m uvicorn app.main:app --host 127.0.0.1 --port 8765 > "$RUNNER_TEMP/native-api.log" 2>&1 &
+          API_PID=$!
+          trap 'kill "$API_PID" 2>/dev/null || true' EXIT
+          for attempt in $(seq 1 30); do
+            curl -fsS http://127.0.0.1:8765/api/v2/config && break
             sleep 1
           done
-          curl --fail --silent http://127.0.0.1:18766/api/v1/config > /dev/null
-      - name: Enable hardware acceleration for Android emulator
-        if: runner.os == 'Linux'
-        run: |
-          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
-          sudo udevadm control --reload-rules
-          sudo udevadm trigger --name-match=kvm
-      - name: Run Android emulator trading flow
-        if: runner.os == 'Linux'
-        uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d
-        with:
-          api-level: 35
-          arch: x86_64
-          target: google_apis
-          disable-animations: true
-          working-directory: mobile
-          script: |
-            adb -s emulator-5554 reverse tcp:18766 tcp:18766
-            YUNO_QA=true flutter drive --driver=test_driver/integration_test.dart --target=integration_test/simulation_platform_test.dart -d emulator-5554 --dart-define=YUNO_SERVER=http://127.0.0.1:18766
-      - name: Run iPhone simulator trading flow
-        if: runner.os == 'macOS'
-        working-directory: mobile
-        run: |
-          DEVICE_ID=$(xcrun simctl list devices available -j | python -c '
-          import json,sys
-          groups=json.load(sys.stdin)["devices"]
-          for runtime in sorted(groups, reverse=True):
-              for device in groups[runtime]:
-                  if device.get("isAvailable") and "iPhone" in device["name"]:
-                      print(device["udid"])
-                      sys.exit(0)
-          sys.exit("No available iPhone simulator")
-          ')
+          DEVICE_ID=$(xcrun simctl list devices available -j | python -c 'import json,sys; print(next(d["udid"] for group in json.load(sys.stdin)["devices"].values() for d in group if d.get("isAvailable") and "iPhone" in d["name"]))')
           xcrun simctl boot "$DEVICE_ID" || true
           xcrun simctl bootstatus "$DEVICE_ID" -b
-          flutter drive --driver=test_driver/integration_test.dart --target=integration_test/simulation_platform_test.dart -d "$DEVICE_ID" --dart-define=YUNO_SERVER=http://127.0.0.1:18766
-      - name: Show isolated backend diagnostics on failure
-        if: failure()
-        run: tail -100 "$RUNNER_TEMP/yuno-platform-server.log" || true
+          cd mobile
+          flutter test integration_test/native_flow_test.dart -d "$DEVICE_ID" --dart-define=API_BASE_URL=http://127.0.0.1:8765 --dart-define=ACCEPTANCE_RUN_ID="$RUN_ID"

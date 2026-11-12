@@ -5,20 +5,9 @@
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
 	<key>CFBundleDevelopmentRegion</key>
-	<string>$(DEVELOPMENT_LANGUAGE)</string>
+	<string>ja</string>
 	<key>CFBundleDisplayName</key>
-	<string>YUNO LIFE SHOP</string>
-	<key>NSCameraUsageDescription</key>
-	<string>撮影した商品写真で出品・査定します。拍摄商品照片用于发布和估价。</string>
-	<key>NSPhotoLibraryUsageDescription</key>
-	<string>商品写真をアルバムから選択します。选择商品照片用于发布。</string>
-	<key>NSLocalNetworkUsageDescription</key>
-	<string>ローカルの取引サーバーに接続します。连接本地交易服务器。</string>
-	<key>NSAppTransportSecurity</key>
-	<dict>
-		<key>NSAllowsLocalNetworking</key>
-		<true/>
-	</dict>
+	<string>Yuno Life</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -26,7 +15,7 @@
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
-	<string>shop</string>
+	<string>yuno_life</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
@@ -37,6 +26,17 @@
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
+	</dict>
+	<key>NSCameraUsageDescription</key>
+	<string>拍摄中古商品照片 / 中古商品の撮影</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>连接本地 Yuno Life 交易平台 / ローカル取引サーバーに接続</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>选择中古商品照片 / 中古商品写真の選択</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
@@ -77,5 +77,12 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
+	<key>CFBundleLocalizations</key>
+	<array>
+		<string>ja</string>
+		<string>zh-Hans</string>
+	</array>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 </dict>
 </plist>

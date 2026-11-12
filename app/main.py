@@ -249,7 +249,7 @@ def redirect(url, msg=""):
 
 
 async def _friendly_http_error(request, exc):
-    if request.url.path.startswith(("/api/v1/", "/ai-jobs")) or request.url.path == "/healthz":
+    if request.url.path.startswith(("/api/v1/", "/api/v2/", "/ai-jobs")) or request.url.path == "/healthz":
         return JSONResponse({"detail": exc.detail}, status_code=exc.status_code)
     try:
         lang = lang_from(request)
@@ -282,7 +282,7 @@ app.add_exception_handler(_StarletteHTTPException, _friendly_http_error)
 @app.exception_handler(RequestValidationError)
 async def _friendly_validation_error(request, exc):
     # 畸形输入统一返回 400(而非框架默认 422),并给友好页面/JSON。
-    if request.url.path.startswith(("/api/v1/", "/ai-jobs")):
+    if request.url.path.startswith(("/api/v1/", "/api/v2/", "/ai-jobs")):
         return JSONResponse({"detail": "bad input"}, status_code=400)
     try:
         lang = lang_from(request)
@@ -3915,3 +3915,7 @@ def me_extra(request: Request):
     finally:
         c.close()
 
+
+# Native mobile boundary; existing HTML routes and business logic stay intact.
+from .api_v2 import router as mobile_api_router
+app.include_router(mobile_api_router)
