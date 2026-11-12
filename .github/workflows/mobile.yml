@@ -34,8 +34,10 @@ jobs:
           flutter test --no-pub test
       - name: Compile distribution candidate without signing
         working-directory: mobile
-        run: flutter build ios --release --no-codesign --dart-define=API_BASE_URL=https://yuno-life-shop-free.onrender.com
+        run: |
+          flutter build ipa --release --no-codesign --dart-define=API_BASE_URL=https://yuno-life-shop-free.onrender.com
+          ditto -c -k --sequesterRsrc --keepParent build/ios/archive/Runner.xcarchive build/ios/yuno-unsigned.xcarchive.zip
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: ios-unsigned-candidate
-          path: mobile/build/ios/iphoneos/Runner.app
+          path: mobile/build/ios/yuno-unsigned.xcarchive.zip
