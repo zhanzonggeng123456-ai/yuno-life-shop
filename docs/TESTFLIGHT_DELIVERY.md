@@ -2,13 +2,14 @@
 
 ## 0.4.8（13）：正式 Logo 更新
 
-2026-11-12（America/New_York），按用户要求替换为已确认的第三版 Logo，并重新上传 TestFlight。图稿仅缩放，沿用日本町屋、暖帘和中古器物、朱红米纸配色及确认后的字标。更新 iOS 各尺寸 AppIcon、原生启动图、Flutter 加载与连接失败页 Logo，同时同步 Android 源码图标；本轮未生成或交付新的 Android APK。
+2026-11-12（America/New_York），按用户要求替换为已确认的第三版 Logo，并重新上传 TestFlight。**0.4.8（13）已提交外部测试审核，Apple 显示“正在等待审核”。** 图稿仅缩放，沿用日本町屋、暖帘和中古器物、朱红米纸配色及确认后的字标。更新 iOS 各尺寸 AppIcon、原生启动图、Flutter 加载与连接失败页 Logo，同时同步 Android 源码图标；本轮未生成或交付新的 Android APK。
 
 - 源码提交 `d4525c5`，版本为 0.4.8（13）。[iOS CI #43263546397](https://github.com/zhanzonggeng123456-ai/yuno-life-shop/actions/runs/43263546397) 静态检查、Flutter 测试、归档均通过；本机静态检查及 25 项 Flutter 测试也通过。
 - 18 项 iOS 图标声明均核对到正确尺寸、RGB 无 alpha。实际导出 IPA 深度严格签名校验通过，Bundle ID、版本、构建号读回一致，Store 描述文件及 Beta 权限正确，Flutter 包内 Logo 与确认图稿派生文件逐字节一致，实际编译图标已查看。
 - IPA：`outputs/yuno-life-0.4.8-13-app-store.ipa`，40,911,170 字节，SHA-256 `19324258b495ccf0c67c96dcf907f00c85d47410d4783808eca39380043c99a8`。未签名归档及本轮检查、签名、上传日志保留在 `outputs/`。
 - 首次上传返回包损坏，随后导出明确报符号临时文件写入失败。保留失败日志，只清理经日志来源与 Bundle ID 验证的已退出 Yuno 临时目录及本轮可再生测试缓存，未触碰其他项目目录或共享签名材料。再次上传在 12:11（纽约）返回 `Upload succeeded` 与 `EXPORT SUCCEEDED`；Apple 页面已出现 0.4.8（13），处理中。
 - 独立 2 GiB RAM 盘已卸载，IPA 和归档已保存回本项目。旧 0.4.7（12）已批准构建和全部历史证据保留。
+- Apple 二进制状态已读回“已验证”，构建 ID `1a798b5f-bb5b-4577-957f-362265c75c8d`。双语测试说明已保存，新增构建已加入现有外部群组并提交审核；实际群组页面显示 0.4.8（13）“正在等待审核”、0.4.7（12）“已批准”。仍为 0 个测试员，未勾选自动通知。最新截图为 `outputs/testflight-0.4.8-13-submitted.png`，结构化证据为 `outputs/testflight-0.4.8-13-delivery-proof.json`。
 
 2026-11-12（America/New_York）复查：Apple 外部群组页面已显示 **0.4.7（12）“已批准”**，TestFlight 外部 Beta 审核通过。当前外部群组仍为 0 个测试员，未发送邀请或启用公开链接；这不代表正式 App Store 上架审核通过。批准截图与无凭据记录保存在 `outputs/testflight-external-review-approved.png` 和 `outputs/testflight-external-review-approved.json`。
 
