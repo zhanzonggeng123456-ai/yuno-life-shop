@@ -1,7 +1,7 @@
 name: Native 0.4.7 validation
 on:
   push:
-    branches: [main, codex/flutter-native-app, codex/integrate-native-cloud]
+    branches: [main]
     paths: ['app/**', 'tests/**', 'mobile/**', '.github/workflows/mobile.yml']
   pull_request:
     branches: [main]

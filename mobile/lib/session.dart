@@ -165,7 +165,7 @@ class Session extends ChangeNotifier {
   Future<Json> get(String path) async => decode(
         await client
             .get(uri(path), headers: headers)
-            .timeout(const Duration(seconds: 20)),
+            .timeout(const Duration(seconds: 90)),
       );
   Future<Json> post(String path, Json data) async => decode(
         await client
