@@ -1,5 +1,13 @@
 # TestFlight 交付记录
 
+## 2026-11-14：外部测试加入入口修复
+
+用户反馈公开链接显示“此 Beta 版本目前不接受任何新测试员”。实际检查：0.4.8（13）和旧版均已获批；公开链接已启用，未设置人数上限或设备条件，但新版仍显示“通知测试员”，尚未手动分发。此前提交时取消自动通知后，没有完成获批后的手动分发和公开入口验证，不能将“获批”当作可加入测试的交付结果。
+
+已对 0.4.8（13）执行手动分发，操作时群组为 0 个测试员；刷新后该构建不再显示“通知测试员”。未修改用户账号、招募条件或其他项目。裸链接短时间仍返回旧的停止招募页面，响应包含缓存时间；加入版本查询参数的新请求已独立验证返回 `Join the Yuno Life beta`、`View in TestFlight` 和正确应用描述，不再含停止招募提示。可用入口：[Yuno Life TestFlight](https://testflight.apple.com/join/226jfJyU?build=13)。
+
+无凭据证据保存在 `outputs/testflight-0.4.8-13-public-distribution-proof.json`，实际公开页面为 `outputs/testflight-0.4.8-13-public-link-working.html`。这确认了公开加入网页可用，未冒称本轮已在用户 iPhone 上完成 TestFlight 接受和安装。
+
 ## 0.4.8（13）：正式 Logo 更新
 
 2026-11-12（America/New_York），按用户要求替换为已确认的第三版 Logo，并重新上传 TestFlight。**0.4.8（13）已提交外部测试审核，Apple 显示“正在等待审核”。** 图稿仅缩放，沿用日本町屋、暖帘和中古器物、朱红米纸配色及确认后的字标。更新 iOS 各尺寸 AppIcon、原生启动图、Flutter 加载与连接失败页 Logo，同时同步 Android 源码图标；本轮未生成或交付新的 Android APK。
