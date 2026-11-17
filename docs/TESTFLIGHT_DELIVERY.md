@@ -1,5 +1,16 @@
 # TestFlight 交付记录
 
+## 2026-11-17：0.5.0（14）深度优化发布进行中
+
+- [PR #2](https://github.com/zhanzonggeng123456-ai/yuno-life-shop/pull/2) 已合并为 `e19ae60`。改动见 USABILITY_TRUST_050.md；保留确认的 Logo 和模拟支付、配送边界。
+- SQLite、libSQL 各 144 项及容器持久化 CI 通过；最终本机和归档 CI 静态检查及 39 项 Flutter 测试通过。四组原生模拟器流程仍在执行，不预记通过。
+- 部署前加密备份与恢复验证 [44123006803](https://github.com/zhanzonggeng123456-ai/yuno-life-shop/actions/runs/44123006803) 成功。Render 已部署 `e19ae60`（`dep-dbu800dbedkc73925fe0`），公网健康、v1/v2 配置、新增安全/运营接口未登录 401，以及已有专用审核账号独立登录和 `/me` 均通过。证据 outputs/testflight-0.5.0-14-backend-proof.json。
+- 首次候选使用 Intel runner 默认 Xcode 16.4／iOS 18.5 SDK，签名校验通过，但 Apple 拒绝该 SDK，不记为成功上传。失败 IPA、归档、签名回执及上传日志已单列 sdk18-rejected；流水线 `017ab26` 明确指定 Xcode 26.3，[44125866721](https://github.com/zhanzonggeng123456-ai/yuno-life-shop/actions/runs/44125866721) 已通过静态检查、39 项测试和归档。最终 IPA 读回 iOS 26.2 SDK、0.5.0（14），深度严格签名、Store 描述文件、运行库、云端地址和 Logo 一致性均通过。
+- 新 IPA `outputs/yuno-life-0.5.0-14-app-store.ipa`，41,036,070 字节，SHA-256 `b7ab16ad93b09390fd743c1123ad5e51e707ef5850079ff6d1d4331e1cffe8bb`；最终归档、签名回执和构建日志均保留。
+- 新 SDK 归档上传两次在读取 Apple 应用记录时返回 HTTP 500；间隔后第三次明确返回 401 NOT_AUTHORIZED、凭据缺失或失效。浏览器也退回登录页 authResult=FAILED；尝试定位 Xcode 登录入口时 Mac 已锁定。已请求用户解锁并恢复现有 Xcode Apple Accounts 和网页登录，没有要求提供密码或验证码。未记录成功上传，也未重复生成证书。
+- 首组模拟器测试在注册成功后遇到测试框架 pageBack() 对 iOS 返回控件的错误假设，已改为点击 App 的“返回”tooltip。另一次预缓存命令路径错误已修正；失败不计通过。当前运行 [44127370043](https://github.com/zhanzonggeng123456-ai/yuno-life-shop/actions/runs/44127370043)，使用 Xcode 26.3，测试前准备运行库，每组数据库和上传目录独立；最终结果待读回。
+- 0.4.8（13）继续正在测试；0.5.0（14）尚未上传成功或分发。最终上传、审核及公开加入状态待实际读回后更新。
+
 ## 2026-11-14：外部测试加入入口修复
 
 用户反馈公开链接显示“此 Beta 版本目前不接受任何新测试员”。实际检查：0.4.8（13）和旧版均已获批；公开链接已启用，未设置人数上限或设备条件，但新版仍显示“通知测试员”，尚未手动分发。此前提交时取消自动通知后，没有完成获批后的手动分发和公开入口验证，不能将“获批”当作可加入测试的交付结果。
