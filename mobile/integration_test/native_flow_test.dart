@@ -52,6 +52,17 @@ void main() {
         const Duration(milliseconds: 200),
         EnginePhase.sendSemanticsUpdate,
         const Duration(minutes: 2));
+    Future<void> waitFor(Finder finder) async {
+      final deadline = DateTime.now().add(const Duration(seconds: 60));
+      while (finder.evaluate().isEmpty && DateTime.now().isBefore(deadline)) {
+        await Future<void>.delayed(const Duration(milliseconds: 200));
+        await tester.pump();
+      }
+      expect(finder, findsOneWidget,
+          reason: 'Expected native UI result; visible text: '
+              '${tester.widgetList<Text>(find.byType(Text)).map((w) => w.data).whereType<String>().join(" | ")}');
+    }
+
     Future<void> reveal(Finder finder, {double delta = 220}) async {
       for (var i = 0; i < 40 && finder.evaluate().isEmpty; i++) {
         await tester.drag(find.byType(Scrollable).first, Offset(0, -delta));
@@ -122,8 +133,9 @@ void main() {
       await settle();
       await tapText('发布闲置');
       expect(picker.rearRequested, isTrue);
-      expect(find.text('封面'), findsOneWidget);
+      await waitFor(find.text('封面'));
       await tapText('从相册选');
+      await waitFor(find.text('待上传照片：10 张'));
       await reveal(field('商品名称'));
       await tester.enterText(field('商品名称'), 'DEMO Panasonic 電子レンジ');
       FocusManager.instance.primaryFocus?.unfocus();
@@ -133,7 +145,7 @@ void main() {
       await tester.tap(find.byType(NavigationDestination).at(2));
       await settle();
       await tapText('发布闲置');
-      expect(find.text('待上传照片：10 张'), findsOneWidget);
+      await waitFor(find.text('待上传照片：10 张'));
       expect(tester.widget<TextField>(field('商品名称')).controller!.text,
           'DEMO Panasonic 電子レンジ');
       stage('draft_restored_before_upload');
