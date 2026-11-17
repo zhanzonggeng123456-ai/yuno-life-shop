@@ -289,6 +289,7 @@ Widget imageView(
       width: width,
       height: height,
       fit: fit,
+      cacheHeight: height < 600 ? (height * 2).round() : null,
       errorBuilder: (_, e, st) => SizedBox(
         height: height,
         width: width,
@@ -310,7 +311,8 @@ class _HomeShellState extends State<HomeShell> {
       builder: (context, _) => Scaffold(
             body: SafeArea(
               child: KeyedSubtree(
-                key: ValueKey('$tab-${session.language}-${session.signedIn}'),
+                key:
+                    ValueKey('$tab-${session.language}-${session.identityKey}'),
                 child: [
                   MarketHome(
                     api: session,
@@ -528,10 +530,25 @@ class LoadView extends StatefulWidget {
 
 class _LoadViewState extends State<LoadView> {
   late Future<Json> value;
+  late String identity;
+  void identityChanged() {
+    if (identity == session.identityKey) return;
+    identity = session.identityKey;
+    reload();
+  }
+
   @override
   void initState() {
     super.initState();
+    identity = session.identityKey;
+    session.addListener(identityChanged);
     value = widget.load();
+  }
+
+  @override
+  void dispose() {
+    session.removeListener(identityChanged);
+    super.dispose();
   }
 
   void reload() {
@@ -3260,6 +3277,8 @@ class _PublishPageState extends State<PublishPage> with WidgetsBindingObserver {
             File(localPhotos[index].path),
             height: 150,
             width: 150,
+            cacheWidth: 300,
+            cacheHeight: 300,
             fit: BoxFit.cover,
           );
     return SizedBox(

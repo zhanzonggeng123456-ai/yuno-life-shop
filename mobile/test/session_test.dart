@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:async';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
@@ -93,5 +94,65 @@ void main() {
     expect(restarted.language, 'ja');
     expect(restarted.baseUrl, 'https://new.example');
     expect(restarted.signedIn, isFalse);
+  });
+  test('late unauthorized response cannot clear a newer login', () async {
+    await login();
+    final old = Completer<http.Response>();
+    session.client = MockClient((request) async {
+      if (request.url.path.endsWith('/old')) return old.future;
+      if (request.url.path.endsWith('/login')) {
+        return http.Response('{"access_token":"new-session"}', 200);
+      }
+      return http.Response('{"id":2,"role":"user"}', 200);
+    });
+    final waiting = session.get('/old');
+    final check = expectLater(
+        waiting,
+        throwsA(
+            isA<ApiError>().having((e) => e.code, 'code', 'session_changed')));
+    await login();
+    old.complete(http.Response('Unauthorized', 401));
+    await check;
+    expect(session.me!['id'], 2);
+    expect(session.signedIn, isTrue);
+    expect(await storage.read(key: 'session'), 'new-session');
+  });
+  test('late profile response cannot resurrect a logged-out identity',
+      () async {
+    await login();
+    final old = Completer<http.Response>();
+    session.client = MockClient((_) => old.future);
+    final waiting = session.refreshMe();
+    final check = expectLater(
+        waiting,
+        throwsA(
+            isA<ApiError>().having((e) => e.code, 'code', 'session_changed')));
+    await session.signOut(remote: false);
+    old.complete(http.Response('{"id":1,"role":"admin"}', 200));
+    await check;
+    expect(session.me, isNull);
+    expect(session.signedIn, isFalse);
+  });
+  test('late logout response cannot sign out a newer account', () async {
+    await login();
+    final old = Completer<http.Response>();
+    session.client = MockClient((request) async {
+      if (request.url.path.endsWith('/logout')) return old.future;
+      if (request.url.path.endsWith('/login')) {
+        return http.Response('{"access_token":"new-account"}', 200);
+      }
+      return http.Response('{"id":2}', 200);
+    });
+    final waiting = session.signOut();
+    final check = expectLater(
+        waiting,
+        throwsA(
+            isA<ApiError>().having((e) => e.code, 'code', 'session_changed')));
+    await login();
+    old.complete(http.Response('{}', 200));
+    await check;
+    expect(session.me!['id'], 2);
+    expect(session.signedIn, isTrue);
+    expect(await storage.read(key: 'session'), 'new-account');
   });
 }

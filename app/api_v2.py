@@ -81,6 +81,29 @@ def listing(c,row):
     return out
 
 
+def listing_many(c, rows):
+    """Batch related reads: three queries per 400 items, not two per item."""
+    rows = list(rows)
+    result = []
+    for offset in range(0, len(rows), 400):
+        chunk = rows[offset:offset + 400]
+        ids = [r['id'] for r in chunk]
+        sellers = list({r['seller_id'] for r in chunk if r['seller_id'] is not None})
+        photo_map = {lid: [] for lid in ids}
+        marks = ','.join('?' for _ in ids)
+        for photo in c.execute(f'SELECT * FROM images WHERE listing_id IN ({marks}) ORDER BY sort,id', ids):
+            photo_map[photo['listing_id']].append(dict(photo) | {'url':'/uploads/'+photo['filename']})
+        seller_map = {}
+        if sellers:
+            marks = ','.join('?' for _ in sellers)
+            seller_map = {r['id']:clean(r) for r in c.execute(
+                f'SELECT id,display_name,role FROM users WHERE id IN ({marks})', sellers)}
+        for row in chunk:
+            result.append(clean(row) | {'photos':photo_map[row['id']],
+                'effective_price':legacy.effective_price(row), 'seller':seller_map.get(row['seller_id'])})
+    return result
+
+
 def action(path,zh,ja,fields=None):
     return {'path':path,'label':{'zh':zh,'ja':ja},'fields':fields or {}}
 
@@ -137,7 +160,7 @@ def listings(request:Request,q:str='',category:str='',region:str='',price_min:in
             sql+=' AND NOT EXISTS (SELECT 1 FROM user_blocks b WHERE (b.user_id=? AND b.blocked_id=l.seller_id) OR (b.blocked_id=? AND b.user_id=l.seller_id))'
             args += [u['id'],u['id']]
         sql+=' ORDER BY l.is_featured DESC,l.id DESC LIMIT 200'
-        return {'items':[listing(c,r) for r in c.execute(sql,args)]}
+        return {'items':listing_many(c,c.execute(sql,args))}
 
 
 @router.get('/listings/{lid}')
@@ -171,17 +194,21 @@ def me(request:Request):
     u=user(request)
     with d.connect() as c:
         out={k:u[k] for k in PUBLIC_FIELDS};out['email']=u['email']
-        out['listings']=[listing(c,r) for r in c.execute('SELECT * FROM listings WHERE seller_id=? ORDER BY id DESC',(u['id'],))]
+        out['listings']=listing_many(c,c.execute('SELECT * FROM listings WHERE seller_id=? ORDER BY id DESC',(u['id'],)))
         for table,where in [('orders','buyer_id=? OR seller_id=?'),('buybacks','seller_id=?'),('service_orders','user_id=?'),('oneclick_drafts','user_id=?')]:
             args=(u['id'],u['id']) if table=='orders' else (u['id'],)
             out[table]=[clean(r) for r in c.execute(f'SELECT * FROM {table} WHERE {where} ORDER BY id DESC',args)]
-        out['following']=[listing(c,r) for r in c.execute('SELECT l.* FROM listings l JOIN listing_follows f ON f.listing_id=l.id WHERE f.user_id=? ORDER BY f.id DESC',(u['id'],))]
+        out['following']=listing_many(c,c.execute("SELECT l.* FROM listings l JOIN listing_follows f ON f.listing_id=l.id WHERE f.user_id=? AND l.status='active' AND NOT EXISTS (SELECT 1 FROM user_blocks b WHERE (b.user_id=? AND b.blocked_id=l.seller_id) OR (b.blocked_id=? AND b.user_id=l.seller_id)) ORDER BY f.id DESC",(u['id'],u['id'],u['id'])))
+        order_items={}
+        order_ids=list({order['listing_id'] for order in out['orders']})
+        for start in range(0,len(order_ids),400):
+            batch=order_ids[start:start+400]
+            marks=','.join('?' for _ in batch)
+            order_items.update({item['id']:item for item in listing_many(c,c.execute(f'SELECT * FROM listings WHERE id IN ({marks})',batch))})
         for order in out['orders']:
-            row=c.execute('SELECT * FROM listings WHERE id=?',(order['listing_id'],)).fetchone()
-            order['listing']=listing(c,row) if row else None
+            order['listing']=order_items.get(order['listing_id'])
         out['offers']=[clean(r) for r in c.execute('SELECT o.* FROM offers o JOIN listings l ON l.id=o.listing_id WHERE o.buyer_id=? OR l.seller_id=? ORDER BY o.id DESC',(u['id'],u['id']))]
         out['threads']=[dict(r) for r in c.execute('SELECT DISTINCT m.listing_id,m.buyer_id,l.title_ja,l.title_zh FROM messages m JOIN listings l ON l.id=m.listing_id WHERE m.buyer_id=? OR l.seller_id=?',(u['id'],u['id']))]
-        out['following']=[r for r in out['following'] if r['status']=='active' and not blocked(c,u['id'],r['seller_id'])]
         out['deliveries']=[clean(r) for r in c.execute('SELECT dl.* FROM deliveries dl JOIN orders o ON o.id=dl.order_id WHERE o.buyer_id=? OR o.seller_id=? OR dl.courier_id=? ORDER BY dl.id DESC',(u['id'],u['id'],u['id']))]
         if u['role']=='courier':
             out['deliveries']=[clean(r) for r in c.execute("SELECT * FROM deliveries WHERE status='requested' OR courier_id=? ORDER BY id DESC",(u['id'],))]
@@ -204,8 +231,12 @@ def market():
 def auctions(request:Request):
     u=user(request,True)
     with d.connect() as c:
-        rows=c.execute("SELECT a.*,l.title_ja,l.title_zh,l.seller_id FROM auctions a JOIN listings l ON l.id=a.listing_id WHERE l.status NOT IN ('deleted','moderation_hold') ORDER BY a.id DESC")
-        return {'items':[clean(r) for r in rows if not u or not blocked(c,u['id'],r['seller_id'])]}
+        sql="SELECT a.*,l.title_ja,l.title_zh,l.seller_id FROM auctions a JOIN listings l ON l.id=a.listing_id WHERE l.status NOT IN ('deleted','moderation_hold')"
+        args=[]
+        if u:
+            sql+=' AND NOT EXISTS (SELECT 1 FROM user_blocks b WHERE (b.user_id=? AND b.blocked_id=l.seller_id) OR (b.blocked_id=? AND b.user_id=l.seller_id))'
+            args=[u['id'],u['id']]
+        return {'items':[clean(r) for r in c.execute(sql+' ORDER BY a.id DESC',args)]}
 
 
 @router.get('/ai-jobs/{jid}')

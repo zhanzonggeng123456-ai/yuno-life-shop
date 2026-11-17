@@ -332,6 +332,10 @@ CREATE TABLE IF NOT EXISTS ai_jobs(
 CREATE TABLE IF NOT EXISTS comp_cache(
   id INTEGER PRIMARY KEY AUTOINCREMENT, model_key TEXT NOT NULL,
   source TEXT NOT NULL, comps_json TEXT DEFAULT '[]', fetched_at TEXT);
+CREATE INDEX IF NOT EXISTS images_listing_order ON images(listing_id,sort,id);
+CREATE INDEX IF NOT EXISTS listings_market_order ON listings(status,is_featured,id);
+CREATE INDEX IF NOT EXISTS user_blocks_reverse ON user_blocks(blocked_id,user_id);
+
 """
 
 

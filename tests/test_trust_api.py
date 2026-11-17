@@ -148,3 +148,25 @@ def test_deletion_refuses_running_analysis_and_preserves_transaction_audit():
     assert buyer.get(order)['id']
     with closing(d.connect()) as c:
         assert c.execute('SELECT 1 FROM order_audit WHERE order_id=?',(int(order.split('/')[-1]),)).fetchone()
+
+
+def test_listing_batch_preserves_contract_with_constant_related_query_count():
+    from app.api_v2 import listing, listing_many
+    seller=Mobile('batch@example.jp')
+    ids=[seller.listing() for _ in range(12)]
+    with closing(d.connect()) as c:
+        rows=c.execute('SELECT * FROM listings ORDER BY id DESC').fetchall()
+        c.execute('INSERT INTO images(listing_id,filename,sort) VALUES(?,?,?)',(ids[0],'cover.png',0))
+        c.commit()
+        expected=[listing(c,row) for row in rows]
+        class Counted:
+            def __init__(self): self.calls=0
+            def execute(self,*args): self.calls+=1; return c.execute(*args)
+        counted=Counted()
+        assert listing_many(counted,rows)==expected
+        assert counted.calls==2
+        assert listing_many(counted,[])==[] and counted.calls==2
+    public=seller.get('/listings')['items']
+    assert [i['id'] for i in public]==list(reversed(ids))
+    assert public[-1]['photos'][0]['url']=='/uploads/cover.png'
+    assert 'email' not in public[0]['seller']
