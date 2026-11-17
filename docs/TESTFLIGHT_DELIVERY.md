@@ -4,9 +4,9 @@
 
 **优化代码及最终签名 IPA 已完成；Apple 上传尚未成功，尚未提交新版外部审核或分发。** 最终包包含启动、持久草稿、账号恢复/删除、举报/屏蔽、交易下一步说明、列表批量查询与会话隔离改进，沿用确认的 Logo。细节见 USABILITY_TRUST_050.md；支付与配送继续模拟。
 
-- 发布源码 `93b04b3`；[归档 CI 44136573809](https://github.com/zhanzonggeng123456-ai/yuno-life-shop/actions/runs/44136573809) 使用明确指定的 Xcode 26.3，静态检查、42 项 Flutter 测试和 Release 归档通过。本机 42 项与静态检查也通过。后续进度文档不改变已归档的 mobile/app 源码树。
+- 发布源码 `93b04b3`；[归档 CI 44136573809](https://github.com/zhanzonggeng123456-ai/yuno-life-shop/actions/runs/44136573809) 使用明确指定的 Xcode 26.3，静态检查、42 项 Flutter 测试和 Release 归档通过。本机 42 项与静态检查也通过。后续验收脚本和进度文档不改变已归档的 mobile/lib、ios、assets、pubspec 构建输入及 app 树。
 - 最终 IPA：`outputs/yuno-life-0.5.0-14-app-store.ipa`，41,038,275 字节，SHA-256 `767d45ff0c7eef3c747981d95ba856b4ef071091f908f6636a803d2d462055a6`。读回 SDK 为 iOS 26.2，版本 0.5.0（14）；深度严格签名、Store 描述文件、Beta 权限、运行库、云端地址及确认 Logo 的逐字节一致性均通过。归档 ZIP、签名回执和日志保存在 outputs。
-- [原生模拟器运行 44136574205](https://github.com/zhanzonggeng123456-ai/yuno-life-shop/actions/runs/44136574205)：角色、拒绝/恢复、结算三组已通过；对应 role/closure/settlement-final.log 已保存。主业务组在 App 启动后卡住模拟器 VM 调试连接，未计通过，已停止卡住的作业并仅补跑 [44143334466](https://github.com/zhanzonggeng123456-ai/yuno-life-shop/actions/runs/44143334466)。每组使用新的数字 run id、独立数据库及上传目录；fixture 图片与测试输入不等于真实硬件、身份或时间流逝。
+- [原生模拟器运行 44136574205](https://github.com/zhanzonggeng123456-ai/yuno-life-shop/actions/runs/44136574205)：角色、拒绝/恢复、结算三组已通过；对应 role/closure/settlement-final.log 已保存。主业务组在 App 启动后卡住模拟器 VM 调试连接，未计通过，已停止卡住的作业并仅补跑 [44143334466](https://github.com/zhanzonggeng123456-ai/yuno-life-shop/actions/runs/44143334466)。该补跑已完成注册、草稿恢复、十图上传/AI，但验收在重拍保存未结束时抢点禁用菜单而失败；现改为检查服务端照片 URL、画面照片及菜单可用状态后继续，正在单组补测，不改业务代码或重签安装包。每组使用新的数字 run id、独立数据库及上传目录；fixture 图片与测试输入不等于真实硬件、身份或时间流逝。
 - 原生角色流程曾暴露快速退出时旧页面加载 Future 在下一帧前返回 401，产生未处理异步异常。已用本机回归复现并修复立即错误监听及下拉刷新错误传播，保留页面错误和重试；新原生角色流程已通过。旧候选另存 before-lifecycle-fix，不作为最终交付。
 - SQLite、libSQL 各 144 项与容器持久化 CI 通过。部署前加密备份/恢复验证 [44123006803](https://github.com/zhanzonggeng123456-ai/yuno-life-shop/actions/runs/44123006803) 成功。Render 已部署 `e19ae60`（`dep-dbu800dbedkc73925fe0`）；公网健康、v1/v2 配置、新安全/运营接口未登录 401，以及原专用审核账号独立登录和 `/me` 均通过。发布源码的 app 树与该部署一致，后续仅客户端及验收调整不需重复部署后端。
 - 首次 Intel 默认 SDK 18.5 候选被 Apple 拒绝，已修复为 SDK 26.2 并保留失败证据。随后上传曾返回 Apple HTTP 500、401；**最终 93b04b3 包再次上传明确失败：No Accounts with App Store Connect Access，团队 MH39P2B573。** 没有 Upload succeeded 回执，不记为已上传。

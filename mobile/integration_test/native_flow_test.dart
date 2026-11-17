@@ -63,6 +63,44 @@ void main() {
               '${tester.widgetList<Text>(find.byType(Text)).map((w) => w.data).whereType<String>().join(" | ")}');
     }
 
+    Future<Map<String, dynamic>> waitForDraft(
+        int did, bool Function(Map<String, dynamic>) ready) async {
+      final deadline = DateTime.now().add(const Duration(seconds: 60));
+      do {
+        final current = await app.session.get('/oneclick/$did');
+        if (ready(current)) return current;
+        await Future<void>.delayed(const Duration(milliseconds: 200));
+        await tester.pump();
+      } while (DateTime.now().isBefore(deadline));
+      fail('Draft photo operation was not persisted before the deadline');
+    }
+
+    String? networkUrl(Image image) {
+      ImageProvider<Object> provider = image.image;
+      if (provider is ResizeImage) provider = provider.imageProvider;
+      return provider is NetworkImage ? provider.url : null;
+    }
+
+    Future<void> waitForCover(String path) async {
+      final deadline = DateTime.now().add(const Duration(seconds: 60));
+      bool ready() {
+        final images = tester.widgetList<Image>(find.byType(Image));
+        final menus = tester.widgetList<PopupMenuButton<String>>(
+            find.byType(PopupMenuButton<String>));
+        return images.isNotEmpty &&
+            networkUrl(images.first) == app.session.photo(path) &&
+            menus.isNotEmpty &&
+            menus.first.enabled;
+      }
+
+      while (!ready() && DateTime.now().isBefore(deadline)) {
+        await Future<void>.delayed(const Duration(milliseconds: 200));
+        await tester.pump();
+      }
+      expect(ready(), isTrue,
+          reason: 'Replacement must be displayed and its menu enabled');
+    }
+
     Future<void> reveal(Finder finder, {double delta = 220}) async {
       for (var i = 0; i < 40 && finder.evaluate().isEmpty; i++) {
         await tester.drag(find.byType(Scrollable).first, Offset(0, -delta));
@@ -163,30 +201,44 @@ void main() {
       await tester.tap(find.byType(PopupMenuButton<String>).at(1));
       await settle();
       await tapText('设为封面');
-      draft = await app.session.get('/oneclick/$did');
+      draft = await waitForDraft(
+          did, (value) => value['photos'][0]['url'] == previousCover);
+      await waitForCover(previousCover as String);
       expect(draft['photos'][0]['url'], previousCover);
       await tester.tap(find.byType(PopupMenuButton<String>).at(1));
       await settle();
       await tapText('删除');
-      draft = await app.session.get('/oneclick/$did');
+      draft = await waitForDraft(
+          did, (value) => (value['photos'] as List).length == 9);
+      await waitFor(find.byWidgetPredicate((widget) =>
+          widget is ListView &&
+          widget.scrollDirection == Axis.horizontal &&
+          widget.semanticChildCount == 9));
       expect((draft['photos'] as List).length, 9);
       await tapText('从相册选');
       draft = await app.session.get('/oneclick/$did');
       expect((draft['photos'] as List).length, 9);
-      expect(find.text('待上传照片：1 张'), findsOneWidget);
+      await waitFor(find.text('待上传照片：1 张'));
       await tapText('AI 一键识别 · 鉴定 · 估价');
       draft = await app.session.get('/oneclick/$did');
       expect((draft['photos'] as List).length, 10);
+      final coverBeforeRetake = draft['photos'][0]['url'];
       picker.rearRequested = false;
       await reveal(find.byType(PopupMenuButton<String>), delta: -220);
       await tester.tap(find.byType(PopupMenuButton<String>).first);
       await settle();
       await tapText('重拍');
       expect(picker.rearRequested, isTrue);
+      draft = await waitForDraft(
+          did, (value) => value['photos'][0]['url'] != coverBeforeRetake);
+      await waitForCover(draft['photos'][0]['url'] as String);
+      final coverBeforeReplace = draft['photos'][0]['url'];
       await tester.tap(find.byType(PopupMenuButton<String>).first);
       await settle();
       await tapText('替换');
-      draft = await app.session.get('/oneclick/$did');
+      draft = await waitForDraft(
+          did, (value) => value['photos'][0]['url'] != coverBeforeReplace);
+      await waitForCover(draft['photos'][0]['url'] as String);
       expect((draft['photos'] as List).length, 10);
       stage('cover_delete_add_retake_replace');
       await tapText('AI 一键识别 · 鉴定 · 估价');
