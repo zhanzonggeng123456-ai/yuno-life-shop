@@ -1,6 +1,11 @@
 name: Native simulator full acceptance
 on:
   workflow_dispatch:
+    inputs:
+      flows:
+        description: JSON list of independent native flows
+        required: true
+        default: '["native","role","closure","settlement"]'
 permissions:
   contents: read
 jobs:
@@ -13,11 +18,7 @@ jobs:
       fail-fast: false
       max-parallel: 4
       matrix:
-        include:
-          - {flow: native, index: 1}
-          - {flow: role, index: 2}
-          - {flow: closure, index: 3}
-          - {flow: settlement, index: 4}
+        flow: ${{ fromJSON(inputs.flows) }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
@@ -63,7 +64,14 @@ jobs:
           xcrun simctl boot "$DEVICE_ID" || true
           xcrun simctl bootstatus "$DEVICE_ID" -b
           FLOW="${{ matrix.flow }}"
-          RUN_ID="${GITHUB_RUN_ID}${{ matrix.index }}"
+          case "$FLOW" in
+            native) FLOW_INDEX=1 ;;
+            role) FLOW_INDEX=2 ;;
+            closure) FLOW_INDEX=3 ;;
+            settlement) FLOW_INDEX=4 ;;
+            *) exit 2 ;;
+          esac
+          RUN_ID="${GITHUB_RUN_ID}${FLOW_INDEX}"
           export ACCEPTANCE_RUN_ID="$RUN_ID"
           export YUNO_DB_PATH="$PROJECT_ROOT/data/acceptance-$RUN_ID/yuno.db"
           export YUNO_UPLOAD_DIR="$PROJECT_ROOT/data/acceptance-$RUN_ID/uploads"
@@ -71,8 +79,12 @@ jobs:
           python -m uvicorn app.main:app --host 127.0.0.1 --port 8765 > "$RUNNER_TEMP/native-$FLOW-api.log" 2>&1 &
           API_PID=$!
           READY=0
-          for ATTEMPT in $(seq 1 30); do
-            if curl -fsS --max-time 3 -o /dev/null http://127.0.0.1:8765/api/v2/config; then
+          for ATTEMPT in $(seq 1 300); do
+            if ! kill -0 "$API_PID" 2>/dev/null; then
+              cat "$RUNNER_TEMP/native-$FLOW-api.log"
+              exit 1
+            fi
+            if curl -fs --max-time 3 -o /dev/null http://127.0.0.1:8765/api/v2/config; then
               READY=1
               break
             fi
