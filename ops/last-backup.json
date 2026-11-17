@@ -1,7 +1,7 @@
 {
   "format": 1,
-  "created_at_utc": "20261115T230031Z",
-  "ciphertext_sha256": "e8c33996044f97f656deb19132debe9b29549e96ecb9f3cab01416418f031b6c",
-  "draft_release_id": 446430937,
+  "created_at_utc": "20261117T015520Z",
+  "ciphertext_sha256": "33db6b78979722bad15838786385e2e7adc577bcfd57d50377936b6febbe9c39",
+  "draft_release_id": 447939573,
   "verified_restore": true
 }
