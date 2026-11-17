@@ -1,7 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'main.dart'
-    show session, PageFrame, LoadView, open, ensureLogin, notify, failure;
+    show
+        session,
+        PageFrame,
+        DetailPage,
+        LoadView,
+        open,
+        ensureLogin,
+        notify,
+        failure,
+        empty;
 
 Future<void> reportContent(BuildContext context, String type, int id) async {
   if (!await ensureLogin(context) || !context.mounted) return;
@@ -510,6 +519,7 @@ class ModerationPage extends StatelessWidget {
             ListView(padding: const EdgeInsets.all(16), children: [
           Text(session.tr('人工判断成立后，商品停止展示或消息正文被移除；交易与审计记录保留。',
               '報告を認定すると商品を非公開、またはメッセージ本文を削除します。取引・監査記録は保持します。')),
+          if ((data['items'] as List).isEmpty) empty(),
           for (final item in data['items'])
             Card(
                 child: Padding(
@@ -519,9 +529,39 @@ class ModerationPage extends StatelessWidget {
                         children: [
                           Text(
                               '#${item['id']} · ${item['target_type']} #${item['target_id']}'),
-                          Text('${item['reason']}'),
+                          Text({
+                                'illegal': session.tr('违法或禁售物品', '違法・出品禁止物'),
+                                'counterfeit': session.tr('疑似假冒', '偽造品の疑い'),
+                                'harassment':
+                                    session.tr('骚扰或不当内容', '嫌がらせ・不適切な内容'),
+                                'privacy': session.tr('泄露个人信息', '個人情報の公開'),
+                                'other': session.tr('其他', 'その他'),
+                              }[item['reason']] ??
+                              '${item['reason']}'),
+                          if (item['target_type'] == 'listing') ...[
+                            Text(
+                                '${item[session.zh ? 'reported_title_zh' : 'reported_title_ja'] ?? item['reported_title_ja'] ?? ''}'),
+                            TextButton(
+                                onPressed: () => open(
+                                    context,
+                                    DetailPage(
+                                        path: '/listings/${item['target_id']}',
+                                        title: session.tr('被举报商品', '報告対象の商品'))),
+                                child:
+                                    Text(session.tr('查看被举报商品', '報告対象の商品を見る'))),
+                          ],
+                          if (item['target_type'] == 'message') ...[
+                            Text(session.tr('被举报消息正文', '報告対象のメッセージ')),
+                            SelectableText(
+                                '${item['reported_body'] ?? session.tr('内容已不存在', 'コンテンツがありません')}'),
+                          ],
                           Text('${item['details']}'),
-                          Text('${item['status']}'),
+                          Text({
+                                'open': session.tr('待处理', '確認待ち'),
+                                'upheld': session.tr('举报成立', '報告を認定'),
+                                'dismissed': session.tr('举报不成立', '非該当')
+                              }[item['status']] ??
+                              '${item['status']}'),
                           if (item['status'] == 'open')
                             Wrap(spacing: 8, children: [
                               OutlinedButton(

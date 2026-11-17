@@ -186,7 +186,7 @@ def reports(request: Request):
     if not can_operate(user):
         raise HTTPException(403, 'forbidden')
     with closing(db.connect()) as c:
-        return {'items': [dict(r) for r in c.execute('SELECT * FROM content_reports ORDER BY id DESC LIMIT 200')]}
+        return {'items': [dict(r) for r in c.execute("SELECT r.*,l.title_ja AS reported_title_ja,l.title_zh AS reported_title_zh,m.body AS reported_body FROM content_reports r LEFT JOIN listings l ON r.target_type='listing' AND l.id=r.target_id LEFT JOIN messages m ON r.target_type='message' AND m.id=r.target_id ORDER BY r.id DESC LIMIT 200")]}
 
 
 @router.post('/admin/reports/{rid}/resolve')
@@ -210,7 +210,7 @@ async def resolve_report(request: Request, rid: int):
             return {'status': row['status']}
         if decision == 'upheld':
             if row['target_type'] == 'listing':
-                c.execute("UPDATE listings SET status='moderation_hold',updated_at=? WHERE id=?",
+                c.execute("UPDATE listings SET status='moderation_hold',updated_at=? WHERE id=? AND status<>'deleted'",
                           (now_tokyo(), row['target_id']))
             else:
                 c.execute("UPDATE messages SET body='[Content removed / 内容已移除 / 削除済み]' WHERE id=?",

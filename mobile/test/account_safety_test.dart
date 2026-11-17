@@ -1,3 +1,6 @@
+import 'dart:convert';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:yuno_life/account_safety.dart';
@@ -66,5 +69,65 @@ void main() {
     expect(find.textContaining('模擬決済を記録'), findsOneWidget);
     expect(find.textContaining('実際の請求・配送は発生しません'), findsOneWidget);
     api.dispose();
+  });
+  testWidgets(
+      'moderation shows the reported content and requires a decision reason',
+      (tester) async {
+    final original = session.client;
+    final writes = <String>[];
+    session.client = MockClient((request) async {
+      if (request.method == 'POST') {
+        writes.add(request.body);
+        return http.Response('{"status":"upheld"}', 200);
+      }
+      return http.Response(
+          jsonEncode({
+            'items': [
+              {
+                'id': 1,
+                'target_type': 'message',
+                'target_id': 7,
+                'reason': 'harassment',
+                'details': 'Review this',
+                'status': 'open',
+                'reported_body': 'Reported content only'
+              },
+              {
+                'id': 2,
+                'target_type': 'listing',
+                'target_id': 9,
+                'reason': 'counterfeit',
+                'details': '',
+                'status': 'open',
+                'reported_title_zh': '被举报商品示例'
+              },
+            ]
+          }),
+          200,
+          headers: {'content-type': 'application/json; charset=utf-8'});
+    });
+    addTearDown(() => session.client = original);
+    await tester.pumpWidget(const MaterialApp(home: ModerationPage()));
+    await tester.pumpAndSettle();
+    expect(
+        find.byWidgetPredicate(
+            (w) => w is SelectableText && w.data == 'Reported content only'),
+        findsOneWidget);
+    await tester.ensureVisible(find.text('成立并移除内容').first);
+    await tester.tap(find.text('成立并移除内容').first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('确认处理'));
+    await tester.pumpAndSettle();
+    expect(writes, isEmpty);
+    await tester.enterText(
+        find.byType(TextField), 'Reviewed the reported content');
+    await tester.tap(find.text('确认处理'));
+    await tester.pumpAndSettle();
+    expect(jsonDecode(writes.single),
+        {'decision': 'upheld', 'note': 'Reviewed the reported content'});
+    await tester.scrollUntilVisible(find.text('查看被举报商品'), 200,
+        scrollable: find.byType(Scrollable).first);
+    expect(find.text('查看被举报商品'), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 }

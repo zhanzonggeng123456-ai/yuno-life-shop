@@ -31,14 +31,18 @@ def test_delete_anonymizes_revokes_and_retains_other_owners():
     u, other = Mobile('delete@example.jp'), Mobile('other@example.jp')
     lid, other_lid = u.listing(), other.listing()
     u.post('/account/recovery-code',{'password':u.password})
-    u.post('/listings/'+str(lid)+'/photos/add',files={'images':('owned.png',b'img','image/png')})
+    u.post('/listings/'+str(lid)+'/photos/add',files={'photos':('owned.png',b'img','image/png')})
+    other.post('/listings/'+str(other_lid)+'/photos/add',files={'photos':('other.png',b'other','image/png')})
+    other_photo=other.get('/listings/'+str(other_lid))['photos'][0]['url']
     # Use a draft too, which must be erased alongside listing images.
     draft=u.post('/oneclick/upload',{'name':'camera'},files={'photos':('draft.png',b'img','image/png')})
     with closing(d.connect()) as c:
         files=[r['filename'] for r in c.execute('SELECT filename FROM images WHERE listing_id=?',(lid,))]
         row=c.execute('SELECT photo FROM oneclick_drafts WHERE user_id=?',(u.id,)).fetchone()
         files.append(row['photo'])
-    assert files
+    assert len(files)==2
+    for file in files:
+        assert u.client.get('/uploads/'+file).status_code==200
     u.post('/account/delete',{'password':'bad','confirmation':'DELETE'},expected=403)
     u.post('/account/delete',{'password':u.password,'confirmation':'NO'},expected=400)
     result=u.post('/account/delete',{'password':u.password,'confirmation':'DELETE'})
@@ -47,6 +51,7 @@ def test_delete_anonymizes_revokes_and_retains_other_owners():
     for file in files:
         assert u.client.get('/uploads/'+file).status_code==404
     assert other.get('/listings/'+str(other_lid))['id']==other_lid
+    assert other.client.get(other_photo).status_code==200
     assert u.client.get('/api/v2/listings/'+str(lid)).status_code==404
     with closing(d.connect()) as c:
         row=c.execute('SELECT * FROM users WHERE id=?',(u.id,)).fetchone()
@@ -118,7 +123,11 @@ def test_blocked_messages_and_auction_mutations_cannot_bypass_policy():
     with closing(d.connect()) as c:
         mid=c.execute('SELECT id FROM messages WHERE listing_id=?',(lid,)).fetchone()['id']
     stranger.post('/reports',{'target_type':'message','target_id':mid,'reason':'privacy'},expected=404)
-    buyer.post('/reports',{'target_type':'message','target_id':mid,'reason':'harassment'})
+    report_id=buyer.post('/reports',{'target_type':'message','target_id':mid,'reason':'harassment'})['id']
+    moderator=Mobile('message-moderator@example.jp','operator')
+    preview=next(r for r in moderator.get('/admin/reports')['items'] if r['id']==report_id)
+    assert preview['reported_body']=='Hello'
+    assert buyer.client.get('/api/v2/admin/reports',headers=buyer.headers).status_code==403
     ends=(datetime.now(timezone.utc)+timedelta(hours=1)).isoformat()
     auction=seller.post(f'/listings/{lid}/auction',{'start_price':1000,'reserve_price':0,'min_increment':100,'buy_now_price':5000,'ends_at':ends,'deposit_required':1,'deposit_amount':100})['next']
     seller.post('/account/blocked/'+str(buyer.id),{'blocked':True})
@@ -185,3 +194,13 @@ def test_native_reads_close_their_database_connections(monkeypatch):
     for path in ('/config','/listings','/me','/auctions','/market'):
         user.get(path)
         assert opened and all(c.closed for c in opened)
+
+
+def test_moderation_cannot_change_a_deleted_listing_back_to_hold():
+    owner,reporter,operator=Mobile('deleted-report-owner@example.jp'),Mobile('deleted-reporter@example.jp'),Mobile('deleted-report-operator@example.jp','operator')
+    lid=owner.listing()
+    rid=reporter.post('/reports',{'target_type':'listing','target_id':lid,'reason':'other'})['id']
+    owner.post('/account/delete',{'password':owner.password,'confirmation':'DELETE'})
+    operator.post(f'/admin/reports/{rid}/resolve',{'decision':'upheld','note':'content no longer exists'})
+    with closing(d.connect()) as c:
+        assert c.execute('SELECT status FROM listings WHERE id=?',(lid,)).fetchone()['status']=='deleted'
