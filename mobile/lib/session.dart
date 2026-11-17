@@ -5,6 +5,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'draft_store.dart';
 
 typedef Json = Map<String, dynamic>;
 
@@ -18,7 +19,10 @@ class ApiError implements Exception {
 
 class Session extends ChangeNotifier {
   http.Client client;
-  Session({http.Client? client}) : client = client ?? http.Client();
+  final DraftStore drafts;
+  Session({http.Client? client, DraftStore? drafts})
+      : client = client ?? http.Client(),
+        drafts = drafts ?? DraftStore();
   final storage = const FlutterSecureStorage(
     iOptions: IOSOptions(
       accessibility: KeychainAccessibility.first_unlock_this_device,
@@ -30,6 +34,36 @@ class Session extends ChangeNotifier {
   );
   String language = 'system';
   String? _token;
+  int _revision = 0;
+  Future<void>? _credentialWrites;
+  String get identityKey => '$baseUrl:${me?['id']}:$_revision';
+  void _ensureCurrent(int revision) {
+    if (revision != _revision) throw ApiError(409, 'session_changed');
+  }
+
+  Future<void> _persistIdentity(int revision, String? token, String server) {
+    final next = (_credentialWrites ?? Future<void>.value())
+        .catchError((Object _) {})
+        .then((_) async {
+      if (revision != _revision) return;
+      if (token == null) {
+        await storage.delete(key: 'session');
+        await storage.delete(key: 'session_server');
+      } else {
+        await storage.write(key: 'session', value: token);
+        await storage.write(key: 'session_server', value: server);
+      }
+    });
+    _credentialWrites = next;
+    void release() {
+      if (identical(_credentialWrites, next)) _credentialWrites = null;
+    }
+
+    next.then((_) => release(),
+        onError: (Object _, StackTrace __) => release());
+    return next;
+  }
+
   Json? me;
   Json config = {};
   SharedPreferences? preferences;
@@ -63,7 +97,10 @@ class Session extends ChangeNotifier {
     config = await get('/config');
     if (signedIn) {
       try {
-        me = await get('/me');
+        final revision = _revision;
+        final profile = await get('/me');
+        _ensureCurrent(revision);
+        me = profile;
       } on ApiError catch (error) {
         if (error.status != 401) rethrow;
       }
@@ -95,40 +132,67 @@ class Session extends ChangeNotifier {
   }
 
   Future<void> authenticate(bool register, Json fields) async {
+    final startingRevision = _revision;
     final data = await post(register ? '/register' : '/login', fields);
+    _ensureCurrent(startingRevision);
     final token = data['access_token'];
     if (token is! String || token.isEmpty) {
       throw ApiError(401, 'authentication_failed');
     }
-    await storage.write(key: 'session', value: token);
-    await storage.write(key: 'session_server', value: baseUrl);
+    final revision = ++_revision;
     _token = token;
-    me = await get('/me');
+    me = null;
+    await _persistIdentity(revision, token, baseUrl);
+    _ensureCurrent(revision);
+    final profile = await get('/me');
+    _ensureCurrent(revision);
+    me = profile;
     notifyListeners();
   }
 
   Future<void> signOut({bool remote = true}) async {
+    final revision = _revision;
     try {
       if (remote && signedIn) {
         await post('/logout', {});
       }
     } finally {
       // Network failure must not keep the user signed in on this device.
-      await clearIdentity();
+      if (revision == _revision) await clearIdentity();
     }
   }
 
   Future<void> clearIdentity() async {
+    final revision = ++_revision;
     _token = null;
     me = null;
-    await storage.delete(key: 'session');
-    await storage.delete(key: 'session_server');
     notifyListeners();
+    await _persistIdentity(revision, null, baseUrl);
   }
 
   Future<void> refreshMe() async {
-    me = await get('/me');
+    final revision = _revision;
+    final profile = await get('/me');
+    _ensureCurrent(revision);
+    me = profile;
     notifyListeners();
+  }
+
+  Future<bool> deleteAccount(String password) async {
+    final uid = me?['id'] as int?;
+    final server = baseUrl, revision = _revision;
+    await post(
+        '/account/delete', {'password': password, 'confirmation': 'DELETE'});
+    var cleaned = true;
+    try {
+      if (uid != null) await drafts.clearAccount(server, uid);
+    } catch (_) {
+      cleaned =
+          false; // The server deletion succeeded; report local cleanup separately.
+    } finally {
+      if (revision == _revision) await clearIdentity();
+    }
+    return cleaned;
   }
 
   Uri uri(String path) => Uri.parse('$baseUrl/api/v2$path');
@@ -137,7 +201,8 @@ class Session extends ChangeNotifier {
         'Accept-Language': zh ? 'zh' : 'ja',
         if (_token != null) 'Authorization': 'Bearer $_token',
       };
-  Future<Json> decode(http.Response response) async {
+  Future<Json> decode(http.Response response, {int? requestRevision}) async {
+    if (requestRevision != null) _ensureCurrent(requestRevision);
     // A gateway may return HTML or an empty body for 401 responses.
     if (response.statusCode == 401 && _token != null) {
       await clearIdentity();
@@ -162,26 +227,33 @@ class Session extends ChangeNotifier {
     return data;
   }
 
-  Future<Json> get(String path) async => decode(
-        await client
-            .get(uri(path), headers: headers)
-            .timeout(const Duration(seconds: 90)),
-      );
-  Future<Json> post(String path, Json data) async => decode(
-        await client
-            .post(
-              uri(path),
-              headers: {...headers, 'Content-Type': 'application/json'},
-              body: jsonEncode(data),
-            )
-            .timeout(const Duration(seconds: 20)),
-      );
+  Future<Json> get(String path) async {
+    final revision = _revision;
+    final response = await client
+        .get(uri(path), headers: headers)
+        .timeout(const Duration(seconds: 90));
+    return decode(response, requestRevision: revision);
+  }
+
+  Future<Json> post(String path, Json data) async {
+    final revision = _revision;
+    final response = await client
+        .post(
+          uri(path),
+          headers: {...headers, 'Content-Type': 'application/json'},
+          body: jsonEncode(data),
+        )
+        .timeout(const Duration(seconds: 20));
+    return decode(response, requestRevision: revision);
+  }
+
   Future<Json> upload(
     String path,
     Json fields,
     List<XFile> files, {
     String field = 'photos',
   }) async {
+    final revision = _revision;
     if (files.length > 10) {
       throw ApiError(400, 'max_10_photos');
     }
@@ -196,10 +268,12 @@ class Session extends ChangeNotifier {
       }
       request.files.add(await http.MultipartFile.fromPath(field, file.path));
     }
+    _ensureCurrent(revision);
     return decode(
       await http.Response.fromStream(
         await client.send(request).timeout(const Duration(seconds: 45)),
-      ),
+      ).timeout(const Duration(seconds: 45)),
+      requestRevision: revision,
     );
   }
 }

@@ -1,5 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:image_picker_platform_interface/image_picker_platform_interface.dart';
@@ -60,6 +62,46 @@ void main() {
     await tester.pumpAndSettle();
     expect(picker.sources.length, 2);
     expect(find.text('每件商品最多 10 张照片。'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox());
+  });
+  testWidgets(
+      'pending photos keep global numbering and do not claim a second cover',
+      (tester) async {
+    final originalPicker = ImagePickerPlatform.instance,
+        originalClient = session.client;
+    final dir = await tester
+        .runAsync(() => Directory.systemTemp.createTemp('yuno-pending-'));
+    final photo = File('${dir!.path}/photo.png');
+    await tester.runAsync(() => photo.writeAsBytes(base64Decode(
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGM4fvkgAATAAlwVeCj7AAAAAElFTkSuQmCC')));
+    ImagePickerPlatform.instance = CapacityPicker(XFile(photo.path));
+    session.client = MockClient((_) async => http.Response(
+        jsonEncode({
+          'status': 'uploaded',
+          'draft': {},
+          'photos': [
+            {'url': '/uploads/existing.png'}
+          ]
+        }),
+        200));
+    session.language = 'zh';
+    session.config = {'categories': []};
+    addTearDown(() async {
+      ImagePickerPlatform.instance = originalPicker;
+      session.client = originalClient;
+      await dir.delete(recursive: true);
+    });
+    await tester.pumpWidget(const MaterialApp(home: PublishPage(draftId: 7)));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('拍照'));
+    await tester.tap(find.text('拍照'));
+    await tester.pumpAndSettle();
+    expect(find.text('封面'), findsOneWidget);
+    expect(find.text('#2'), findsOneWidget);
+    await tester.tap(find.byType(PopupMenuButton<String>).last);
+    await tester.pumpAndSettle();
+    expect(find.text('设为封面'), findsNothing);
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox());
   });

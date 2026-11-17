@@ -184,6 +184,20 @@ CREATE TABLE IF NOT EXISTS users(
   region TEXT DEFAULT 'sakado', is_active INTEGER DEFAULT 1, created_at TEXT);
 CREATE TABLE IF NOT EXISTS sessions(
   token TEXT PRIMARY KEY, user_id INTEGER NOT NULL, expires_at TEXT);
+CREATE TABLE IF NOT EXISTS account_recovery(
+  user_id INTEGER PRIMARY KEY, salt TEXT NOT NULL, code_hash TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS user_blocks(
+  user_id INTEGER NOT NULL, blocked_id INTEGER NOT NULL, created_at TEXT,
+  PRIMARY KEY(user_id,blocked_id));
+CREATE TABLE IF NOT EXISTS content_reports(
+  id INTEGER PRIMARY KEY AUTOINCREMENT, reporter_id INTEGER NOT NULL,
+  target_type TEXT NOT NULL, target_id INTEGER NOT NULL, reason TEXT NOT NULL,
+  details TEXT DEFAULT '', status TEXT DEFAULT 'open', resolution TEXT DEFAULT '',
+  resolved_by INTEGER, created_at TEXT, resolved_at TEXT);
+CREATE TABLE IF NOT EXISTS revoked_uploads(name TEXT PRIMARY KEY);
+CREATE TABLE IF NOT EXISTS draft_upload_requests(
+  user_id INTEGER NOT NULL, upload_key TEXT NOT NULL, kind TEXT NOT NULL,
+  draft_id INTEGER NOT NULL, PRIMARY KEY(user_id,upload_key));
 CREATE TABLE IF NOT EXISTS categories(
   id INTEGER PRIMARY KEY AUTOINCREMENT, slug TEXT UNIQUE NOT NULL,
   name_ja TEXT, name_zh TEXT, name_en TEXT, attrs_json TEXT);
@@ -318,6 +332,10 @@ CREATE TABLE IF NOT EXISTS ai_jobs(
 CREATE TABLE IF NOT EXISTS comp_cache(
   id INTEGER PRIMARY KEY AUTOINCREMENT, model_key TEXT NOT NULL,
   source TEXT NOT NULL, comps_json TEXT DEFAULT '[]', fetched_at TEXT);
+CREATE INDEX IF NOT EXISTS images_listing_order ON images(listing_id,sort,id);
+CREATE INDEX IF NOT EXISTS listings_market_order ON listings(status,is_featured,id);
+CREATE INDEX IF NOT EXISTS user_blocks_reverse ON user_blocks(blocked_id,user_id);
+
 """
 
 

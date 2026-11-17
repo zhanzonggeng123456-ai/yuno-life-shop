@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -10,6 +11,8 @@ import 'app_version.dart';
 import 'labels.dart';
 import 'design.dart';
 import 'market_home.dart';
+import 'account_safety.dart';
+import 'trade_status.dart';
 
 final session = Session();
 void main() {
@@ -45,31 +48,15 @@ class _YunoAppState extends State<YunoApp> {
             future: ready,
             builder: (context, snapshot) {
               if (snapshot.connectionState != ConnectionState.done) {
-                return Scaffold(
-                  body: Center(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Image.asset(
-                          'assets/brand/yuno-life-logo.png',
-                          width: 240,
-                          height: 240,
-                          semanticLabel: 'Yuno Life',
-                        ),
-                        const SizedBox(height: 24),
-                        const CircularProgressIndicator(),
-                      ],
-                    ),
-                  ),
-                );
+                return const StartupPanel();
               }
               if (snapshot.hasError) {
                 return Scaffold(
                   body: SafeArea(
                     child: Padding(
                       padding: const EdgeInsets.all(24),
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
+                      child: ListView(
+                        shrinkWrap: true,
                         children: [
                           Image.asset(
                             'assets/brand/yuno-life-logo.png',
@@ -80,18 +67,23 @@ class _YunoAppState extends State<YunoApp> {
                           const SizedBox(height: 24),
                           Text(
                             session.tr(
-                              '暂时无法连接平台。请确认 Mac 后端正在运行，手机与 Mac 位于同一网络。',
-                              '接続できません。Mac のサーバーと同一ネットワークを確認してください。',
+                              '暂时无法连接平台。请检查互联网连接后重试，刚唤醒的服务可能需要稍等片刻。你的账号和已保存草稿不会因此删除。',
+                              '接続できません。インターネット接続を確認して再試行してください。サーバーの起動に時間がかかる場合があります。アカウントと保存済み下書きは削除されません。',
                             ),
                           ),
                           const SizedBox(height: 16),
-                          ConnectionForm(
-                            onSaved: () {
-                              setState(() {
-                                ready = session.bootstrap();
-                              });
-                            },
-                          ),
+                          ExpansionTile(
+                              title: Text(
+                                  session.tr('高级连接设置（内测）', '詳細な接続設定（ベータ版）')),
+                              children: [
+                                ConnectionForm(
+                                  onSaved: () {
+                                    setState(() {
+                                      ready = session.bootstrap();
+                                    });
+                                  },
+                                )
+                              ]),
                           TextButton(
                             onPressed: () {
                               setState(() {
@@ -113,6 +105,53 @@ class _YunoAppState extends State<YunoApp> {
       );
 }
 
+class StartupPanel extends StatefulWidget {
+  const StartupPanel({super.key});
+  @override
+  State<StartupPanel> createState() => _StartupPanelState();
+}
+
+class _StartupPanelState extends State<StartupPanel> {
+  Timer? timer;
+  bool slow = false;
+  @override
+  void initState() {
+    super.initState();
+    timer = Timer(const Duration(seconds: 8), () {
+      if (mounted) setState(() => slow = true);
+    });
+  }
+
+  @override
+  void dispose() {
+    timer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+          body: SafeArea(
+              child: Center(
+                  child: SingleChildScrollView(
+        padding: const EdgeInsets.all(24),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          Image.asset('assets/brand/yuno-life-logo.png',
+              width: 200, height: 200, semanticLabel: 'Yuno Life'),
+          const SizedBox(height: 24),
+          const CircularProgressIndicator(),
+          const SizedBox(height: 20),
+          Text(session.tr('正在连接 Yuno Life…', 'Yuno Life に接続しています…')),
+          if (slow)
+            Padding(
+                padding: const EdgeInsets.only(top: 12),
+                child: Text(
+                    session.tr('首次连接或服务唤醒时可能需要约一分钟。连接超时后可重试，请勿重复注册或付款。',
+                        '初回接続やサーバー起動時は1分ほどかかる場合があります。タイムアウト後は再試行できます。登録や決済を繰り返さないでください。'),
+                    textAlign: TextAlign.center)),
+        ]),
+      ))));
+}
+
 void notify(BuildContext context, String text) {
   if (context.mounted) {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
@@ -121,6 +160,31 @@ void notify(BuildContext context, String text) {
 
 String failure(Object? error) {
   if (error is ApiError) {
+    final safety = <String, List<String>>{
+      'current_password_required': ['当前密码不正确，请重新输入。', '現在のパスワードを確認してください。'],
+      'invalid_recovery': [
+        '邮箱或恢复码不正确，或恢复码已用过。',
+        'メールアドレスまたはコードが違うか、コードが使用済みです。'
+      ],
+      'password_too_short': ['新密码至少需要 8 位。', '新しいパスワードは8文字以上必要です。'],
+      'user_blocked': [
+        '双方已被屏蔽，无法继续发消息或发起新交易。',
+        'ブロックされているため、新規メッセージや取引はできません。'
+      ],
+      'account_unavailable': ['对方账号已不可用。', '相手のアカウントは利用できません。'],
+      'content_not_allowed': [
+        '内容含禁售或不当信息，请修改后再提交。',
+        '禁止・不適切な内容が含まれています。修正してください。'
+      ],
+      'analysis_in_progress': [
+        '分析任务仍在处理，请完成后再删除账号。',
+        '分析が進行中です。完了後に削除を再試行してください。'
+      ],
+    };
+    if (safety.containsKey(error.code)) {
+      final pair = safety[error.code]!;
+      return session.tr(pair[0], pair[1]);
+    }
     if (error.code == 'deposit_required') {
       return session.tr('请先完成模拟保证金，再提交出价。', '模擬保証金の手続き後に入札してください。');
     }
@@ -225,6 +289,7 @@ Widget imageView(
       width: width,
       height: height,
       fit: fit,
+      cacheHeight: height < 600 ? (height * 2).round() : null,
       errorBuilder: (_, e, st) => SizedBox(
         height: height,
         width: width,
@@ -246,7 +311,8 @@ class _HomeShellState extends State<HomeShell> {
       builder: (context, _) => Scaffold(
             body: SafeArea(
               child: KeyedSubtree(
-                key: ValueKey('$tab-${session.language}-${session.signedIn}'),
+                key:
+                    ValueKey('$tab-${session.language}-${session.identityKey}'),
                 child: [
                   MarketHome(
                     api: session,
@@ -464,10 +530,25 @@ class LoadView extends StatefulWidget {
 
 class _LoadViewState extends State<LoadView> {
   late Future<Json> value;
+  late String identity;
+  void identityChanged() {
+    if (identity == session.identityKey) return;
+    identity = session.identityKey;
+    reload();
+  }
+
   @override
   void initState() {
     super.initState();
+    identity = session.identityKey;
+    session.addListener(identityChanged);
     value = widget.load();
+  }
+
+  @override
+  void dispose() {
+    session.removeListener(identityChanged);
+    super.dispose();
   }
 
   void reload() {
@@ -931,6 +1012,12 @@ class _AuthPageState extends State<AuthPage> {
                     : session.tr('注册新账号', '新規登録へ'),
               ),
             ),
+            if (!register)
+              TextButton(
+                  onPressed: busy
+                      ? null
+                      : () => open(context, const ResetPasswordPage()),
+                  child: Text(session.tr('忘记密码？使用恢复码', 'パスワードを忘れた方・リカバリーコード'))),
             simulation(),
           ],
         ),
@@ -1255,6 +1342,28 @@ class DetailPage extends StatelessWidget {
                     '${item[session.zh ? 'desc_zh' : 'desc_ja'] ?? item['desc_ja'] ?? ''}',
                   ),
                 simulation(),
+                if (path.startsWith('/orders/') ||
+                    path.startsWith('/offers/') ||
+                    path.startsWith('/deliveries/') ||
+                    path.startsWith('/refunds/') ||
+                    path.startsWith('/disputes/'))
+                  TradeProgress(
+                      api: session, resource: path.split('/')[1], data: data),
+                if (path.startsWith('/listings/') && item != null)
+                  Wrap(spacing: 8, children: [
+                    TextButton.icon(
+                        onPressed: () =>
+                            reportContent(context, 'listing', item['id']),
+                        icon: const Icon(Icons.flag_outlined),
+                        label: Text(session.tr('举报商品', '商品を報告'))),
+                    if (item['seller_id'] != null &&
+                        item['seller_id'] != session.me?['id'])
+                      TextButton.icon(
+                          onPressed: () =>
+                              blockPerson(context, item['seller_id']),
+                          icon: const Icon(Icons.block),
+                          label: Text(session.tr('屏蔽卖家', '出品者をブロック'))),
+                  ]),
                 for (final key in [
                   'status',
                   'condition_grade',
@@ -2054,6 +2163,11 @@ class ProfilePage extends StatelessWidget {
                     child: ConnectionForm(onSaved: () {}))
               ])),
           if (session.signedIn)
+            ListTile(
+                title: Text(session.tr('账号安全与屏蔽', 'アカウント・ブロック')),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => open(context, const AccountSafetyPage())),
+          if (session.signedIn)
             OutlinedButton(
                 onPressed: () async {
                   try {
@@ -2220,6 +2334,8 @@ class _OrdersPageState extends State<OrdersPage> {
                                 ])),
                           ]),
                           const Divider(height: 22),
+                          TradeProgress(
+                              api: session, resource: 'orders', data: item),
                           Row(children: [
                             badge(session.tr('模拟支付', '模擬決済'), warning: true),
                             const Spacer(),
@@ -2343,6 +2459,21 @@ class _SupportPageState extends State<SupportPage> {
                 'ローカルのルール回答です。有料APIは使用せず、手動判断の代わりにはなりません。',
               ),
             ),
+            Card(
+                child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(session.tr('人工联系与反馈', '運営への連絡')),
+                          Text(session.tr(
+                              '内测期间：在 TestFlight 中打开 Yuno Life，选择“发送 Beta 版反馈”联系运营。举报请使用商品或消息内的举报按钮。不要发送密码、恢复码或银行卡信息。',
+                              'ベータ期間中：TestFlight の Yuno Life で「ベータ版フィードバックを送信」から運営へ連絡できます。報告は商品・メッセージの報告ボタンを使ってください。パスワード・復旧コード・カード情報は送らないでください。')),
+                          if ('${session.config['support_email'] ?? ''}'
+                              .isNotEmpty)
+                            SelectableText(
+                                '${session.config['support_email']}'),
+                        ]))),
             const SizedBox(height: 16),
             TextField(
               controller: question,
@@ -2411,6 +2542,14 @@ class _ChatPageState extends State<ChatPage> {
           builder: (context, data, reload) => ListView(
             padding: const EdgeInsets.all(14),
             children: [
+              if (data['receiver_id'] != null)
+                TextButton.icon(
+                    onPressed: () => blockPerson(context, data['receiver_id']),
+                    icon: const Icon(Icons.block),
+                    label: Text(session.tr('屏蔽对方', '相手をブロック'))),
+              if (data['blocked'] == true)
+                Text(session.tr('双方已屏蔽，无法发送新消息。已有记录保留供交易处理。',
+                    'ブロック中のため新規メッセージは送信できません。取引対応のため記録は保持します。')),
               for (final m in data['items'])
                 Align(
                   alignment: m['sender_id'] == session.me?['id']
@@ -2427,6 +2566,12 @@ class _ChatPageState extends State<ChatPage> {
                             style: const TextStyle(fontWeight: FontWeight.bold),
                           ),
                           Text('${m['body']}'),
+                          if (m['sender_id'] != session.me?['id'])
+                            TextButton(
+                                onPressed: () =>
+                                    reportContent(context, 'message', m['id']),
+                                child:
+                                    Text(session.tr('举报这条消息', 'このメッセージを報告'))),
                           Text(
                             '${m['created_at']}',
                             style: const TextStyle(fontSize: 11),
@@ -2443,7 +2588,7 @@ class _ChatPageState extends State<ChatPage> {
                 decoration: InputDecoration(labelText: label(session, 'body')),
               ),
               FilledButton(
-                onPressed: busy
+                onPressed: busy || data['blocked'] == true
                     ? null
                     : () async {
                         if (text.text.trim().isEmpty) return;
@@ -2507,6 +2652,10 @@ class AdminPage extends StatelessWidget {
               onTap: () =>
                   open(context, AdminSection(section: e.key, title: e.value)),
             ),
+          ListTile(
+              title: Text(session.tr('内容举报处理', 'コンテンツ報告')),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => open(context, const ModerationPage())),
         ],
       ),
     );
@@ -2623,7 +2772,7 @@ class PublishPage extends StatefulWidget {
   State<PublishPage> createState() => _PublishPageState();
 }
 
-class _PublishPageState extends State<PublishPage> {
+class _PublishPageState extends State<PublishPage> with WidgetsBindingObserver {
   final picker = ImagePicker();
   final localPhotos = <XFile>[];
   final name = TextEditingController(),
@@ -2638,32 +2787,253 @@ class _PublishPageState extends State<PublishPage> {
       weight = TextEditingController(text: '0');
   final attrs = <String, TextEditingController>{};
   List<Json> remotePhotos = [];
-  Json? analysis;
+  Json? analysis, pendingReplacement;
   int? did;
   bool busy = false, loading = false, photosDirty = false;
   String? error;
   String progress = '';
   String category = 'other', condition = 'good', size = 'M', region = 'sakado';
+  Timer? saveTimer;
+  String? draftOwner, draftKey, uploadKey;
+  String? draftServer;
+  final ownedPhotos = <String>[];
+  int pendingCount = 0;
+  bool restoring = false, published = false, localRestored = false;
+  final titleKey = GlobalKey(), priceKey = GlobalKey();
+  bool validateFields = false;
+  List<TextEditingController> get fields => [
+        name,
+        text,
+        brand,
+        model,
+        price,
+        jaTitle,
+        zhTitle,
+        jaDesc,
+        zhDesc,
+        weight
+      ];
+
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     did = widget.draftId;
-    if (did != null) {
-      loading = true;
-      refreshDraft().catchError((Object e) {
-        if (mounted) setState(() => error = failure(e));
-      }).whenComplete(() {
-        if (mounted) setState(() => loading = false);
-      });
-    } else {
-      WidgetsBinding.instance.addPostFrameCallback(
-        (_) => pick(ImageSource.camera),
-      );
+    for (final c in fields) {
+      c.addListener(scheduleSave);
     }
+    final uid = session.me?['id'];
+    if (session.signedIn && uid is int) {
+      draftServer = session.baseUrl;
+      draftOwner = session.drafts.owner(draftServer!, uid);
+      draftKey = session.drafts.key(draftOwner!, widget.draftId);
+    }
+    loading = did != null || draftKey != null;
+    WidgetsBinding.instance.addPostFrameCallback((_) => restoreDraft());
+  }
+
+  Json snapshot() => {
+        'did': did,
+        'values': [for (final c in fields) c.text],
+        'attrs': {for (final e in attrs.entries) e.key: e.value.text},
+        'category': category,
+        'condition': condition,
+        'size': size,
+        'region': region,
+        'photos_dirty': photosDirty,
+        'photos': [for (final p in localPhotos) p.path],
+        'owned_photos': ownedPhotos,
+        'upload_key': uploadKey,
+        'pending_count': pendingCount,
+        'replacement': pendingReplacement,
+      };
+  Future<void> saveDraft() async {
+    saveTimer?.cancel();
+    if (draftKey == null || restoring || published) return;
+    try {
+      await session.drafts.save(draftKey!, snapshot());
+    } catch (e) {
+      if (mounted) {
+        setState(() => error = session.tr(
+            '本机草稿保存失败，请保留此页后重试。', '下書きを保存できません。この画面を閉じずに再試行してください。'));
+      }
+      rethrow;
+    }
+  }
+
+  void scheduleSave() {
+    if (restoring || published || draftKey == null) return;
+    saveTimer?.cancel();
+    saveTimer = Timer(const Duration(milliseconds: 600), () {
+      saveDraft().catchError((Object _) {});
+    });
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.inactive ||
+        state == AppLifecycleState.paused) {
+      saveDraft().catchError((Object _) {});
+    }
+  }
+
+  Future<void> restoreDraft() async {
+    restoring = true;
+    var restored = false;
+    try {
+      Json? saved;
+      if (draftKey != null) {
+        saved = await session.drafts.load(draftKey!);
+        if (saved == null && did != null) {
+          final newKey = session.drafts.key(draftOwner!, null);
+          final candidate = await session.drafts.load(newKey);
+          if (candidate?['did'] == did) {
+            saved = candidate;
+            draftKey = newKey;
+          }
+        }
+      }
+      if (!mounted) return;
+      if (saved != null) {
+        restored = true;
+        localRestored = true;
+        did = saved['did'] as int?;
+        final values = saved['values'] as List? ?? [];
+        for (var i = 0; i < fields.length && i < values.length; i++) {
+          fields[i].text = '${values[i]}';
+        }
+        category = saved['category'] ?? category;
+        condition = saved['condition'] ?? condition;
+        size = saved['size'] ?? size;
+        region = saved['region'] ?? region;
+        photosDirty = saved['photos_dirty'] == true;
+        uploadKey = saved['upload_key'];
+        pendingCount = saved['pending_count'] ?? 0;
+        pendingReplacement = saved['replacement'] == null
+            ? null
+            : Map<String, dynamic>.from(saved['replacement']);
+        ownedPhotos.addAll(List<String>.from(saved['owned_photos'] ?? []));
+        for (final path in List<String>.from(saved['photos'] ?? [])) {
+          if (await File(path).exists()) {
+            localPhotos.add(XFile(path));
+          } else {
+            throw const FileSystemException('Draft photo missing');
+          }
+        }
+        for (final e in (saved['attrs'] as Map? ?? {}).entries) {
+          attrs['${e.key}'] = TextEditingController(text: '${e.value}')
+            ..addListener(scheduleSave);
+        }
+        progress = session.tr('已恢复本机草稿。', '保存した下書きを復元しました。');
+      }
+      if (did != null) await refreshDraft();
+    } catch (e) {
+      if (mounted) setState(() => error = failure(e));
+    } finally {
+      restoring = false;
+      if (mounted) setState(() => loading = false);
+    }
+    if (!restored && did == null && mounted) await pick(ImageSource.camera);
+  }
+
+  Future<void> discardLocalDraft() async {
+    final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+              title: Text(session.tr('清除本机草稿？', '端末の下書きを削除しますか？')),
+              content: Text(session.tr(
+                  '此页尚未发布的本机修改与所选照片会被清除。已上传的服务器草稿仍可在个人中心找到。',
+                  '端末の未公開の編集と選択写真を削除します。送信済みの下書きはマイページに残ります。')),
+              actions: [
+                TextButton(
+                    onPressed: () => Navigator.pop(context, false),
+                    child: Text(session.tr('保留', '残す'))),
+                FilledButton(
+                    onPressed: () => Navigator.pop(context, true),
+                    child: Text(session.tr('清除', '削除')))
+              ],
+            ));
+    if (confirmed != true || !mounted) return;
+    setState(() {
+      busy = true;
+      published = true;
+    });
+    saveTimer?.cancel();
+    try {
+      await session.drafts.clear(draftOwner!, draftKey!);
+      if (mounted) Navigator.pop(context);
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          published = false;
+          busy = false;
+          error = failure(e);
+        });
+      }
+    }
+  }
+
+  Future<XFile> keepPhoto(XFile photo) async {
+    if (draftOwner == null) return photo;
+    final saved = await session.drafts.keepPhoto(draftOwner!, photo);
+    ownedPhotos.add(saved.path);
+    return saved;
+  }
+
+  Future<void> flushPhotos() async {
+    final uid = session.me?['id'];
+    if (draftOwner != null &&
+        (draftServer != session.baseUrl ||
+            uid is! int ||
+            session.drafts.owner(session.baseUrl, uid) != draftOwner)) {
+      throw ApiError(401, 'session_expired');
+    }
+    if (pendingReplacement != null) {
+      await saveDraft();
+      final pending = pendingReplacement!;
+      await session.upload('/oneclick/$did/photos/${pending['index']}/replace',
+          {}, [XFile(pending['path'])],
+          field: 'photo');
+      pendingReplacement = null;
+      photosDirty = true;
+      await saveDraft();
+    }
+    while (localPhotos.isNotEmpty) {
+      if (uploadKey == null) {
+        uploadKey =
+            '${DateTime.now().microsecondsSinceEpoch}_${Random.secure().nextInt(1 << 32)}';
+        pendingCount = localPhotos.length;
+      }
+      final batch = localPhotos.take(pendingCount).toList();
+      await saveDraft(); // Persist retry identity before sending a write.
+      final response = await session.upload(
+          did == null ? '/oneclick/upload' : '/oneclick/$did/photos/add',
+          {
+            'upload_key': uploadKey,
+            if (did == null) ...{
+              'name': name.text.trim().isEmpty
+                  ? session.tr('照片中的商品', '写真の商品')
+                  : name.text.trim(),
+              'text': text.text,
+              'condition': condition
+            },
+          },
+          batch);
+      did ??= int.parse('${response['next']}'.split('/').last);
+      localPhotos.removeRange(0, batch.length);
+      uploadKey = null;
+      pendingCount = 0;
+      photosDirty = true;
+      await saveDraft();
+    }
+    await refreshDraft();
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    saveTimer?.cancel();
+    saveDraft().catchError((Object _) {});
     for (final c in [
       name,
       text,
@@ -2695,26 +3065,23 @@ class _PublishPageState extends State<PublishPage> {
         maxWidth: 2400,
       );
       if (photo != null && mounted) {
-        if (did != null) {
-          await session.upload('/oneclick/$did/photos/add', {}, [photo]);
+        final saved = await keepPhoto(photo);
+        if (!mounted) return;
+        setState(() {
+          if (replace != null) {
+            localPhotos[replace] = saved;
+          } else {
+            localPhotos.add(saved);
+          }
           photosDirty = true;
-          await refreshDraft();
-        } else {
-          setState(() {
-            if (replace != null) {
-              localPhotos[replace] = photo;
-            } else {
-              localPhotos.add(photo);
-            }
-            analysis = null;
-          });
-        }
+        });
+        await saveDraft();
       }
     } catch (e) {
       if (mounted) {
         notify(
           context,
-          session.tr('无法打开相机或相册，请检查权限。', 'カメラ・写真へのアクセス権限を確認してください。'),
+          failure(e),
         );
       }
     }
@@ -2738,15 +3105,17 @@ class _PublishPageState extends State<PublishPage> {
         }
         return;
       }
-      if (did != null) {
-        if (selected.isNotEmpty) {
-          await session.upload('/oneclick/$did/photos/add', {}, selected);
-          photosDirty = true;
-        }
-        await refreshDraft();
-      } else if (mounted) {
-        setState(() => localPhotos.addAll(selected));
+      final kept = <XFile>[];
+      for (final photo in selected) {
+        kept.add(await keepPhoto(photo));
       }
+      if (mounted) {
+        setState(() {
+          localPhotos.addAll(kept);
+          photosDirty = true;
+        });
+      }
+      await saveDraft();
     } catch (e) {
       if (mounted) notify(context, failure(e));
     }
@@ -2759,14 +3128,16 @@ class _PublishPageState extends State<PublishPage> {
     setState(() {
       analysis = value;
       remotePhotos = List<Json>.from(value['photos'] ?? []);
-      name.text = '${value['name'] ?? name.text}';
-      text.text = '${value['text'] ?? text.text}';
+      if (name.text.isEmpty) name.text = '${value['name'] ?? ''}';
+      if (text.text.isEmpty) text.text = '${value['text'] ?? ''}';
       if (jaTitle.text.isEmpty) jaTitle.text = '${dr['title_ja'] ?? ''}';
       if (zhTitle.text.isEmpty) zhTitle.text = '${dr['title_zh'] ?? ''}';
       if (jaDesc.text.isEmpty) jaDesc.text = '${dr['desc_ja'] ?? ''}';
       if (zhDesc.text.isEmpty) zhDesc.text = '${dr['desc_zh'] ?? ''}';
-      category = '${dr['category_slug'] ?? category}';
-      condition = '${dr['condition_grade'] ?? condition}';
+      if (!localRestored) {
+        category = '${dr['category_slug'] ?? category}';
+        condition = '${dr['condition_grade'] ?? condition}';
+      }
       if (brand.text.isEmpty) brand.text = '${dr['brand'] ?? ''}';
       if (model.text.isEmpty) model.text = '${dr['model'] ?? ''}';
       if (price.text.isEmpty && dr['suggested_price'] != null) {
@@ -2775,7 +3146,8 @@ class _PublishPageState extends State<PublishPage> {
       for (final e in (dr['attrs'] as Map? ?? {}).entries) {
         attrs.putIfAbsent(
           '${e.key}',
-          () => TextEditingController(text: '${e.value}'),
+          () => TextEditingController(text: '${e.value}')
+            ..addListener(scheduleSave),
         );
       }
     });
@@ -2800,21 +3172,16 @@ class _PublishPageState extends State<PublishPage> {
       progress = session.tr('上传全部照片…', 'すべての写真をアップロード…');
     });
     try {
-      if (did == null) {
-        final response = await session.upload(
-            '/oneclick/upload',
-            {
-              'name': name.text.trim().isEmpty
-                  ? session.tr('照片中的商品', '写真の商品')
-                  : name.text.trim(),
-              'text': text.text,
-              'condition': condition,
-            },
-            localPhotos);
-        did = int.parse('${response['next']}'.split('/').last);
-        localPhotos.clear();
-        await refreshDraft();
-      }
+      await saveDraft();
+      await flushPhotos();
+      await session.post('/oneclick/$did/details', {
+        'name': name.text.trim().isEmpty
+            ? session.tr('照片中的商品', '写真の商品')
+            : name.text.trim(),
+        'text': text.text,
+        'condition': condition,
+      });
+      if (!mounted) return;
       setState(
         () => progress = session.tr('本地识别与两轴鉴定（全部为推测）…', 'ローカル認識と鑑定（すべて推測）…'),
       );
@@ -2841,6 +3208,7 @@ class _PublishPageState extends State<PublishPage> {
       if (mounted) setState(() => error = failure(e));
     } finally {
       if (mounted) setState(() => busy = false);
+      await saveDraft().catchError((Object _) {});
     }
   }
 
@@ -2888,13 +3256,12 @@ class _PublishPageState extends State<PublishPage> {
           maxWidth: 2400,
         );
         if (photo == null) return;
-        await session.upload(
-            '/oneclick/$did/photos/$index/replace',
-            {},
-            [
-              photo,
-            ],
-            field: 'photo');
+        final kept = await keepPhoto(photo);
+        pendingReplacement = {'index': index, 'path': kept.path};
+        photosDirty = true;
+        await saveDraft();
+        if (mounted) setState(() {});
+        await flushPhotos();
       }
       photosDirty = true;
       await refreshDraft();
@@ -2904,12 +3271,15 @@ class _PublishPageState extends State<PublishPage> {
   }
 
   Widget photoTile(int index, bool remote) {
+    final position = remote ? index : remotePhotos.length + index;
     final body = remote
         ? imageView(remotePhotos[index]['url'], height: 150, width: 150)
         : Image.file(
             File(localPhotos[index].path),
             height: 150,
             width: 150,
+            cacheWidth: 300,
+            cacheHeight: 300,
             fit: BoxFit.cover,
           );
     return SizedBox(
@@ -2944,10 +3314,12 @@ class _PublishPageState extends State<PublishPage> {
             children: [
               Expanded(
                 child: Text(
-                  index == 0 ? session.tr('封面', 'カバー') : '#${index + 1}',
+                  position == 0 ? session.tr('封面', 'カバー') : '#${position + 1}',
                 ),
               ),
               PopupMenuButton<String>(
+                enabled:
+                    !busy && uploadKey == null && pendingReplacement == null,
                 onSelected: (op) async {
                   if (remote) {
                     await manageRemote(index, op);
@@ -2963,6 +3335,8 @@ class _PublishPageState extends State<PublishPage> {
                       replace: index,
                     );
                   }
+                  photosDirty = true;
+                  await saveDraft();
                 },
                 itemBuilder: (_) => [
                   for (final pair in [
@@ -2971,7 +3345,8 @@ class _PublishPageState extends State<PublishPage> {
                     ['retake', session.tr('重拍', '撮り直し')],
                     ['delete', session.tr('删除', '削除')],
                   ])
-                    PopupMenuItem(value: pair[0], child: Text(pair[1])),
+                    if (remote || remotePhotos.isEmpty || pair[0] != 'cover')
+                      PopupMenuItem(value: pair[0], child: Text(pair[1])),
                 ],
               ),
             ],
@@ -2983,13 +3358,29 @@ class _PublishPageState extends State<PublishPage> {
 
   Widget edit(TextEditingController c, String key, {int lines = 1}) => Padding(
         padding: const EdgeInsets.only(bottom: 14),
+        key: key == 'title_ja'
+            ? titleKey
+            : key == 'price'
+                ? priceKey
+                : null,
         child: TextField(
           controller: c,
+          onChanged: (_) {
+            if (validateFields) setState(() {});
+          },
           maxLines: lines,
           keyboardType: ['price', 'weight_kg'].contains(key)
               ? const TextInputType.numberWithOptions(decimal: true)
               : TextInputType.text,
-          decoration: InputDecoration(labelText: label(session, key)),
+          decoration: InputDecoration(
+              labelText: label(session, key),
+              errorText: !validateFields
+                  ? null
+                  : key == 'title_ja' && c.text.trim().isEmpty
+                      ? session.tr('请填写日文标题', '日本語タイトルを入力')
+                      : key == 'price' && (int.tryParse(c.text) ?? 0) < 1
+                          ? session.tr('请输入大于 0 的整数价格', '正の整数価格を入力')
+                          : null),
         ),
       );
   @override
@@ -3002,6 +3393,7 @@ class _PublishPageState extends State<PublishPage> {
     final val = Map<String, dynamic>.from(analysis?['valuation'] ?? {});
     final rec = Map<String, dynamic>.from(analysis?['recognition'] ?? {});
     final count = localPhotos.length + remotePhotos.length;
+    scheduleSave();
     return PageFrame(
       title: session.tr('拍照发布', '撮影して出品'),
       child: loading
@@ -3026,14 +3418,18 @@ class _PublishPageState extends State<PublishPage> {
                       scrollDirection: Axis.horizontal,
                       itemCount: count,
                       separatorBuilder: (_, i) => const SizedBox(width: 10),
-                      itemBuilder: (_, i) => photoTile(i, did != null),
+                      itemBuilder: (_, i) => i < remotePhotos.length
+                          ? photoTile(i, true)
+                          : photoTile(i - remotePhotos.length, false),
                     ),
                   ),
                 Row(
                   children: [
                     Expanded(
                       child: FilledButton.icon(
-                        onPressed: busy ? null : () => pick(ImageSource.camera),
+                        onPressed: busy || uploadKey != null
+                            ? null
+                            : () => pick(ImageSource.camera),
                         style: FilledButton.styleFrom(
                             minimumSize: const Size(0, 80)),
                         icon: const Icon(Icons.camera_alt_outlined),
@@ -3043,7 +3439,7 @@ class _PublishPageState extends State<PublishPage> {
                     const SizedBox(width: 10),
                     Expanded(
                       child: OutlinedButton.icon(
-                        onPressed: busy ? null : gallery,
+                        onPressed: busy || uploadKey != null ? null : gallery,
                         style: OutlinedButton.styleFrom(
                             minimumSize: const Size(0, 80)),
                         icon: const Icon(Icons.photo_library_outlined),
@@ -3053,6 +3449,19 @@ class _PublishPageState extends State<PublishPage> {
                   ],
                 ),
                 const SizedBox(height: 20),
+                if (draftKey != null)
+                  Text(session.tr('文字与所选照片自动保存在本机；上传失败可重试。',
+                      '入力と選択した写真は端末に自動保存。アップロード失敗時は再試行できます。')),
+                if (pendingReplacement != null)
+                  Text(session.tr(
+                      '有待上传的替换照片，请重试 AI 分析。', '差し替え写真が未送信です。AI分析を再試行してください。')),
+                if (localPhotos.isNotEmpty)
+                  Text(session.tr('待上传照片：${localPhotos.length} 张',
+                      '未送信の写真：${localPhotos.length}枚')),
+                if (draftKey != null)
+                  TextButton(
+                      onPressed: busy ? null : discardLocalDraft,
+                      child: Text(session.tr('清除本机草稿', '端末の下書きを削除'))),
                 edit(name, 'name'),
                 edit(text, 'text', lines: 3),
                 FilledButton(
@@ -3234,7 +3643,10 @@ class _PublishPageState extends State<PublishPage> {
                       for (final v in ['S', 'M', 'L', 'XL'])
                         DropdownMenuItem(value: v, child: Text(v)),
                     ],
-                    onChanged: (v) => size = v ?? 'M',
+                    onChanged: (v) {
+                      size = v ?? 'M';
+                      scheduleSave();
+                    },
                   ),
                   const SizedBox(height: 14),
                   for (final spec in specification)
@@ -3243,7 +3655,8 @@ class _PublishPageState extends State<PublishPage> {
                       child: TextField(
                         controller: attrs.putIfAbsent(
                           '${spec['key']}',
-                          () => TextEditingController(),
+                          () => TextEditingController()
+                            ..addListener(scheduleSave),
                         ),
                         decoration: InputDecoration(
                           labelText:
@@ -3262,8 +3675,18 @@ class _PublishPageState extends State<PublishPage> {
                                       '写真が変更されました。AI分析を再実行してください。'));
                               return;
                             }
+                            setState(() => validateFields = true);
                             if ((int.tryParse(price.text) ?? 0) < 1 ||
                                 jaTitle.text.trim().isEmpty) {
+                              final target = jaTitle.text.trim().isEmpty
+                                  ? titleKey.currentContext
+                                  : priceKey.currentContext;
+                              if (target != null) {
+                                await Scrollable.ensureVisible(target,
+                                    duration:
+                                        const Duration(milliseconds: 200));
+                              }
+                              if (!context.mounted) return;
                               notify(
                                 context,
                                 session.tr(
@@ -3317,6 +3740,21 @@ class _PublishPageState extends State<PublishPage> {
                                     'attr_${e.key}': e.value.text,
                                 },
                               );
+                              published = true;
+                              saveTimer?.cancel();
+                              if (draftKey != null) {
+                                try {
+                                  await session.drafts
+                                      .clear(draftOwner!, draftKey!);
+                                } catch (_) {
+                                  if (context.mounted) {
+                                    notify(
+                                        context,
+                                        session.tr('商品已发布，本机草稿清理未完成。',
+                                            '出品済みですが、端末の下書きを削除できませんでした。'));
+                                  }
+                                }
+                              }
                               if (widget.auctionAfterPublish &&
                                   context.mounted) {
                                 final listing =

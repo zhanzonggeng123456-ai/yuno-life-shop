@@ -13,6 +13,7 @@ from pydantic import TypeAdapter, ValidationError
 from starlette.concurrency import run_in_threadpool
 from starlette.datastructures import FormData
 
+from .trust import blocked
 from . import db as d
 from .security import audit_log, can_admin, can_appraise, can_operate, check_rate_limit, now_tokyo
 
@@ -81,7 +82,7 @@ def principal(request, optional=False):
         row = c.execute(
             "SELECT u.id,u.email,u.display_name,u.role,u.phone,u.region "
             "FROM sessions s JOIN users u ON u.id=s.user_id "
-            "WHERE s.token=? AND s.expires_at>?", (token, now_tokyo())).fetchone()
+            "WHERE s.token=? AND s.expires_at>? AND u.is_active=1", (token, now_tokyo())).fetchone()
     if not row:
         raise HTTPException(401, "session_expired")
     if not check_rate_limit(f"api:{row['id']}", 300, 60):
@@ -442,6 +443,9 @@ def collection(resource: str, request: Request, q: str = "", category: str = "",
         if region:
             clause += " AND region=?"
             args.append(region)
+        if user and not mine:
+            clause += " AND NOT EXISTS (SELECT 1 FROM user_blocks b WHERE (b.user_id=? AND b.blocked_id=listings.seller_id) OR (b.blocked_id=? AND b.user_id=listings.seller_id))"
+            args += [user["id"],user["id"]]
         if owned:
             clause += " AND is_platform_owned=1"
     with closing(d.connect()) as c:
@@ -467,6 +471,8 @@ def detail(resource: str, item_id: int, request: Request):
         if resource == "listings" and row["status"] not in ("active", "sold") and (
                 not user or (row["seller_id"] != user["id"] and not can_operate(user))):
             raise HTTPException(403, "forbidden")
+        if resource == "listings" and user and blocked(c,user["id"],row["seller_id"]):
+            raise HTTPException(404,"not_found")
         item = listing(c, row) if resource == "listings" else clean(row)
         related = {}
         if resource == "drafts":

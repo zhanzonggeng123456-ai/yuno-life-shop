@@ -1,7 +1,7 @@
 name: yuno_life
 publish_to: none
 description: Yuno Life native secondhand marketplace.
-version: 0.4.8+13
+version: 0.5.0+14
 environment:
   sdk: '>=3.5.0 <4.0.0'
 dependencies:
@@ -13,6 +13,8 @@ dependencies:
   flutter_secure_storage: ^9.2.2
   image_picker: ^1.1.0
   shared_preferences: ^2.3.0
+  path_provider: ^2.1.6
+  crypto: ^3.0.8
 dev_dependencies:
   shared_preferences_android: ^2.5.4
   integration_test:

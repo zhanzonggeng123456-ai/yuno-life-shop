@@ -128,6 +128,15 @@ void main() {
       await tester.enterText(field('商品名称'), 'DEMO Panasonic 電子レンジ');
       FocusManager.instance.primaryFocus?.unfocus();
       await settle();
+      await tester.pageBack();
+      await settle();
+      await tester.tap(find.byType(NavigationDestination).at(2));
+      await settle();
+      await tapText('发布闲置');
+      expect(find.text('待上传照片：10 张'), findsOneWidget);
+      expect(tester.widget<TextField>(field('商品名称')).controller!.text,
+          'DEMO Panasonic 電子レンジ');
+      stage('draft_restored_before_upload');
       await tapText('AI 一键识别 · 鉴定 · 估价');
       final own = await app.session.get('/me');
       final drafts = own['oneclick_drafts'] as List;
@@ -150,6 +159,10 @@ void main() {
       draft = await app.session.get('/oneclick/$did');
       expect((draft['photos'] as List).length, 9);
       await tapText('从相册选');
+      draft = await app.session.get('/oneclick/$did');
+      expect((draft['photos'] as List).length, 9);
+      expect(find.text('待上传照片：1 张'), findsOneWidget);
+      await tapText('AI 一键识别 · 鉴定 · 估价');
       draft = await app.session.get('/oneclick/$did');
       expect((draft['photos'] as List).length, 10);
       picker.rearRequested = false;
