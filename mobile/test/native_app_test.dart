@@ -42,6 +42,63 @@ void main() {
     expect(calls, 3);
     expect(tester.takeException(), isNull);
   });
+  testWidgets('fast reload errors stay in the page before the next frame',
+      (tester) async {
+    var calls = 0;
+    await tester.pumpWidget(MaterialApp(
+        home: LoadView(
+      load: () async {
+        if (++calls > 1) throw Exception('fast refresh unavailable');
+        return <String, dynamic>{};
+      },
+      builder: (context, data, reload) => TextButton(
+          onPressed: reload, child: const Text('Reload immediately')),
+    )));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Reload immediately'));
+    await tester.pumpAndSettle();
+    expect(find.text('重试'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+  testWidgets('sign out cannot leak a protected page reload error',
+      (tester) async {
+    var calls = 0;
+    await tester.pumpWidget(MaterialApp(
+        home: LoadView(
+      load: () async {
+        if (++calls > 1) throw Exception('login_required');
+        return <String, dynamic>{};
+      },
+      builder: (context, data, reload) => const Text('Protected page'),
+    )));
+    await tester.pumpAndSettle();
+    await session.signOut(remote: false);
+    await tester.pumpWidget(const SizedBox());
+    await tester.pumpAndSettle();
+    expect(calls, 2);
+    expect(tester.takeException(), isNull);
+  });
+  testWidgets('pull refresh failure completes and remains retryable',
+      (tester) async {
+    var calls = 0;
+    await tester.pumpWidget(MaterialApp(
+        home: LoadView(
+      load: () async {
+        if (++calls > 1) throw Exception('refresh unavailable');
+        return <String, dynamic>{};
+      },
+      builder: (context, data, reload) => ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        children: const [Text('Refresh this page')],
+      ),
+    )));
+    await tester.pumpAndSettle();
+    await tester.drag(find.byType(ListView), const Offset(0, 400));
+    await tester.pumpAndSettle();
+    expect(calls, 2);
+    expect(find.text('重试'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
   testWidgets('market retry replaces a failed load without setState assertions',
       (tester) async {
     var markets = 0;

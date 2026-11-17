@@ -531,6 +531,14 @@ class LoadView extends StatefulWidget {
 class _LoadViewState extends State<LoadView> {
   late Future<Json> value;
   late String identity;
+  Future<Json> beginLoad() {
+    final next = Future<Json>.sync(widget.load);
+    // An identity change can replace/dispose this view before the next frame.
+    // Observe errors immediately; FutureBuilder still receives the same error.
+    next.ignore();
+    return next;
+  }
+
   void identityChanged() {
     if (identity == session.identityKey) return;
     identity = session.identityKey;
@@ -542,7 +550,7 @@ class _LoadViewState extends State<LoadView> {
     super.initState();
     identity = session.identityKey;
     session.addListener(identityChanged);
-    value = widget.load();
+    value = beginLoad();
   }
 
   @override
@@ -553,7 +561,7 @@ class _LoadViewState extends State<LoadView> {
 
   void reload() {
     if (!mounted) return;
-    final next = widget.load();
+    final next = beginLoad();
     setState(() {
       value = next;
     });
@@ -586,7 +594,11 @@ class _LoadViewState extends State<LoadView> {
           return RefreshIndicator(
             onRefresh: () async {
               reload();
-              await value;
+              try {
+                await value;
+              } catch (_) {
+                // The same failure is displayed by FutureBuilder with retry.
+              }
             },
             child: widget.builder(context, s.data!, reload),
           );

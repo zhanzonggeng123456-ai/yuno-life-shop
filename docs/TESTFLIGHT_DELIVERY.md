@@ -5,10 +5,11 @@
 - [PR #2](https://github.com/zhanzonggeng123456-ai/yuno-life-shop/pull/2) 已合并为 `e19ae60`。改动见 USABILITY_TRUST_050.md；保留确认的 Logo 和模拟支付、配送边界。
 - SQLite、libSQL 各 144 项及容器持久化 CI 通过；最终本机和归档 CI 静态检查及 39 项 Flutter 测试通过。四组原生模拟器流程仍在执行，不预记通过。
 - 部署前加密备份与恢复验证 [44123006803](https://github.com/zhanzonggeng123456-ai/yuno-life-shop/actions/runs/44123006803) 成功。Render 已部署 `e19ae60`（`dep-dbu800dbedkc73925fe0`），公网健康、v1/v2 配置、新增安全/运营接口未登录 401，以及已有专用审核账号独立登录和 `/me` 均通过。证据 outputs/testflight-0.5.0-14-backend-proof.json。
-- 首次候选使用 Intel runner 默认 Xcode 16.4／iOS 18.5 SDK，签名校验通过，但 Apple 拒绝该 SDK，不记为成功上传。失败 IPA、归档、签名回执及上传日志已单列 sdk18-rejected；流水线 `017ab26` 明确指定 Xcode 26.3，[44125866721](https://github.com/zhanzonggeng123456-ai/yuno-life-shop/actions/runs/44125866721) 已通过静态检查、39 项测试和归档。最终 IPA 读回 iOS 26.2 SDK、0.5.0（14），深度严格签名、Store 描述文件、运行库、云端地址和 Logo 一致性均通过。
-- 新 IPA `outputs/yuno-life-0.5.0-14-app-store.ipa`，41,036,070 字节，SHA-256 `b7ab16ad93b09390fd743c1123ad5e51e707ef5850079ff6d1d4331e1cffe8bb`；最终归档、签名回执和构建日志均保留。
+- 首次候选使用 Intel runner 默认 Xcode 16.4／iOS 18.5 SDK，签名校验通过，但 Apple 拒绝该 SDK，不记为成功上传。失败 IPA、归档、签名回执及上传日志已单列 sdk18-rejected；流水线 `017ab26` 明确指定 Xcode 26.3，[44125866721](https://github.com/zhanzonggeng123456-ai/yuno-life-shop/actions/runs/44125866721) 已通过静态检查、39 项测试和归档。先前 SDK 26 候选 IPA 读回 iOS 26.2 SDK、0.5.0（14），深度严格签名、Store 描述文件、运行库、云端地址和 Logo 一致性均通过。
+- 生命周期修复前的候选 IPA（已另存 before-lifecycle-fix，不作为最终交付）原路径 `outputs/yuno-life-0.5.0-14-app-store.ipa`，41,036,070 字节，SHA-256 `b7ab16ad93b09390fd743c1123ad5e51e707ef5850079ff6d1d4331e1cffe8bb`；最终归档、签名回执和构建日志均保留。
 - 新 SDK 归档上传两次在读取 Apple 应用记录时返回 HTTP 500；间隔后第三次明确返回 401 NOT_AUTHORIZED、凭据缺失或失效。浏览器也退回登录页 authResult=FAILED；尝试定位 Xcode 登录入口时 Mac 已锁定。已请求用户解锁并恢复现有 Xcode Apple Accounts 和网页登录，没有要求提供密码或验证码。未记录成功上传，也未重复生成证书。
 - 首组模拟器测试在注册成功后遇到测试框架 pageBack() 对 iOS 返回控件的错误假设，已改为点击 App 的“返回”tooltip。另一次预缓存命令路径错误已修正；失败不计通过。当前运行 [44127370043](https://github.com/zhanzonggeng123456-ai/yuno-life-shop/actions/runs/44127370043)，使用 Xcode 26.3，测试前准备运行库，每组数据库和上传目录独立；最终结果待读回。
+- 原生角色流程业务步骤完成，但快速退出触发未处理 401；已用本机回归复现并修复 LoadView 错误监听和下拉刷新错误传播。42 项 Flutter 测试及静态检查通过，业务代码改变后旧候选单列保存，后续重新构建和重跑原生验收。
 - 0.4.8（13）继续正在测试；0.5.0（14）尚未上传成功或分发。最终上传、审核及公开加入状态待实际读回后更新。
 
 ## 2026-11-14：外部测试加入入口修复
