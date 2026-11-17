@@ -25,7 +25,7 @@ jobs:
           echo "$RUNNER_TEMP/flutter/bin" >> "$GITHUB_PATH"
           "$RUNNER_TEMP/flutter/bin/flutter" --version
           xcodebuild -version
-          flutter precache --ios
+          "$RUNNER_TEMP/flutter/bin/flutter" precache --ios
       - name: Isolated API and current iPhone simulator flow
         run: |
           set -euo pipefail
