@@ -25,6 +25,7 @@ jobs:
           echo "$RUNNER_TEMP/flutter/bin" >> "$GITHUB_PATH"
           "$RUNNER_TEMP/flutter/bin/flutter" --version
           xcodebuild -version
+          flutter precache --ios
       - name: Isolated API and current iPhone simulator flow
         run: |
           set -euo pipefail
@@ -70,7 +71,10 @@ jobs:
               fi
               sleep 1
             done
-            test "$READY" = 1
+            if [ "$READY" != 1 ]; then
+              cat "$RUNNER_TEMP/native-$FLOW-api.log"
+              exit 1
+            fi
             python mobile/tool/acceptance_roles.py --db "$YUNO_DB_PATH" --run-id "$RUN_ID" --lifecycle-fixtures > "$RUNNER_TEMP/native-$FLOW-roles.log" 2>&1 &
             ROLE_PID=$!
             cd mobile

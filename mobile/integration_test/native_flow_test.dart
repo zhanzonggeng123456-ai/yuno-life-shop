@@ -128,7 +128,7 @@ void main() {
       await tester.enterText(field('商品名称'), 'DEMO Panasonic 電子レンジ');
       FocusManager.instance.primaryFocus?.unfocus();
       await settle();
-      await tester.pageBack();
+      await tester.tap(find.byTooltip('返回'));
       await settle();
       await tester.tap(find.byType(NavigationDestination).at(2));
       await settle();
