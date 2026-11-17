@@ -7,6 +7,7 @@ No HTML is returned to, parsed by, or rendered in the mobile application.
 import json
 import os
 import re
+from contextlib import closing
 from http.cookies import SimpleCookie
 from urllib.parse import parse_qs, urlsplit
 
@@ -51,7 +52,7 @@ def user(request, optional=False):
         if optional: return None
         raise HTTPException(401,'login_required')
     token=header[7:]
-    with d.connect() as c:
+    with closing(d.connect()) as c:
         row=c.execute('SELECT u.* FROM users u JOIN sessions s ON s.user_id=u.id WHERE s.token=? AND s.expires_at>=? AND u.is_active=1',(token,now_tokyo())).fetchone()
     if not row: raise HTTPException(401,'session_expired')
     return row
@@ -133,7 +134,7 @@ def command(path,zh,ja,defaults=None):
 
 @router.get('/config')
 def config():
-    with d.connect() as c:
+    with closing(d.connect()) as c:
         categories=[clean(r) for r in c.execute('SELECT * FROM categories ORDER BY id')]
         regions=json.loads(d.get_setting(c,'regions') or '[]')
         services=d.effective_service_prices(d.get_setting(c,'service_prices'))
@@ -148,7 +149,7 @@ def config():
 def listings(request:Request,q:str='',category:str='',region:str='',price_min:int=0,price_max:int=1000000000,only_platform:bool=False):
     if price_min<0 or price_max<price_min: raise HTTPException(400,'bad_price_filter')
     u=user(request,True)
-    with d.connect() as c:
+    with closing(d.connect()) as c:
         sql="SELECT l.* FROM listings l JOIN categories cat ON cat.id=l.category_id WHERE l.status='active' AND l.price BETWEEN ? AND ?"
         args=[price_min,price_max]
         if q:
@@ -166,7 +167,7 @@ def listings(request:Request,q:str='',category:str='',region:str='',price_min:in
 @router.get('/listings/{lid}')
 def listing_detail(request:Request,lid:int):
     u=user(request,True)
-    with d.connect() as c:
+    with closing(d.connect()) as c:
         row=c.execute('SELECT * FROM listings WHERE id=?',(lid,)).fetchone()
         if not row: raise HTTPException(404,'not_found')
         if (row['status'] in ('moderation_hold','deleted') and not (u and (can_operate(u) or u['id']==row['seller_id']))) or (u and blocked(c,u['id'],row['seller_id'])):
@@ -192,7 +193,7 @@ def listing_detail(request:Request,lid:int):
 @router.get('/me')
 def me(request:Request):
     u=user(request)
-    with d.connect() as c:
+    with closing(d.connect()) as c:
         out={k:u[k] for k in PUBLIC_FIELDS};out['email']=u['email']
         out['listings']=listing_many(c,c.execute('SELECT * FROM listings WHERE seller_id=? ORDER BY id DESC',(u['id'],)))
         for table,where in [('orders','buyer_id=? OR seller_id=?'),('buybacks','seller_id=?'),('service_orders','user_id=?'),('oneclick_drafts','user_id=?')]:
@@ -223,14 +224,14 @@ def orders(request:Request): return {'items':me(request)['orders']}
 
 @router.get('/market')
 def market():
-    with d.connect() as c:
+    with closing(d.connect()) as c:
         return {'overview':marketplace_overview(c,legacy.effective_price),'moves':listing_price_moves(c),'categories':category_stats(c),'curve':weekly_curve(c),'basis':{'zh':'平台真实订单；首次与最近成交价比较；挂牌价不计入涨跌。','ja':'実取引の初回価格と最新価格を比較。出品価格は対象外。'}}
 
 
 @router.get('/auctions')
 def auctions(request:Request):
     u=user(request,True)
-    with d.connect() as c:
+    with closing(d.connect()) as c:
         sql="SELECT a.*,l.title_ja,l.title_zh,l.seller_id FROM auctions a JOIN listings l ON l.id=a.listing_id WHERE l.status NOT IN ('deleted','moderation_hold')"
         args=[]
         if u:
@@ -242,7 +243,7 @@ def auctions(request:Request):
 @router.get('/ai-jobs/{jid}')
 def job(request:Request,jid:int):
     u=user(request)
-    with d.connect() as c: out=get_job(c,jid)
+    with closing(d.connect()) as c: out=get_job(c,jid)
     if not out: raise HTTPException(404,'not_found')
     if out['user_id']!=u['id'] and not can_operate(u): raise HTTPException(403,'forbidden')
     return out
@@ -251,7 +252,7 @@ def job(request:Request,jid:int):
 @router.get('/oneclick/{did}')
 def draft(request:Request,did:int):
     u=user(request)
-    with d.connect() as c:
+    with closing(d.connect()) as c:
         row=legacy._draft_or_403(c,did,u)
         out=clean(row)
         names,dr=legacy._draft_photos(row)
@@ -264,7 +265,7 @@ def draft(request:Request,did:int):
 @router.get('/messages/{lid}/{bid}')
 def messages(request:Request,lid:int,bid:int):
     u=user(request)
-    with d.connect() as c:
+    with closing(d.connect()) as c:
         row=c.execute('SELECT * FROM listings WHERE id=?',(lid,)).fetchone()
         if not row or u['id'] not in (bid,row['seller_id']): raise HTTPException(403,'forbidden')
         return {'items':[clean(r) for r in c.execute('SELECT m.*,u.display_name FROM messages m JOIN users u ON u.id=m.sender_id WHERE listing_id=? AND buyer_id=? ORDER BY m.id',(lid,bid))],
@@ -278,7 +279,7 @@ def admin(request:Request,section:str):
     u=user(request)
     if not can_operate(u): raise HTTPException(403,'forbidden')
     mapping={'users':'users','listings':'listings','buybacks':'buybacks','orders':'orders','inventory':'inventory','auctions':'auctions','deliveries':'deliveries','services':'service_orders','refunds':'refunds','disputes':'disputes','high-value':'hv_reviews','alerts':'alerts','suggestions':'price_suggestions','audit':'audit_log','expenses':'expenses'}
-    with d.connect() as c:
+    with closing(d.connect()) as c:
         if section=='profit': return profit_report(c)
         if section=='settings':
             if not can_admin(u): raise HTTPException(403,'forbidden')
@@ -305,7 +306,7 @@ def detail(request:Request,resource:str,rid:int):
     mapping={'orders':'orders','offers':'offers','buyback':'buybacks','services':'service_orders','deliveries':'deliveries','refunds':'refunds','disputes':'disputes','auctions':'auctions','users':'users'}
     if resource not in mapping: raise HTTPException(404,'not_found')
     u=user(request,resource in ('auctions','users'))
-    with d.connect() as c:
+    with closing(d.connect()) as c:
         row=c.execute('SELECT * FROM '+mapping[resource]+' WHERE id=?',(rid,)).fetchone()
         if not row: raise HTTPException(404,'not_found')
         out=clean(row);out['actions']=[]
@@ -432,7 +433,7 @@ async def reorder_draft(request:Request,did:int):
     u=user(request)
     payload=await request.json()
     order=payload.get('order')
-    with d.connect() as c:
+    with closing(d.connect()) as c:
         row=legacy._draft_or_403(c,did,u)
         if row['status']=='published': raise HTTPException(409,'already_published')
         names,dr=legacy._draft_photos(row)
@@ -447,7 +448,7 @@ async def reorder_draft(request:Request,did:int):
 async def replace_draft_photo(request:Request,did:int,idx:int):
     u=user(request)
     form=await request.form()
-    with d.connect() as c:
+    with closing(d.connect()) as c:
         row=legacy._draft_or_403(c,did,u)
         if row['status']=='published': raise HTTPException(409,'already_published')
         names,dr=legacy._draft_photos(row)

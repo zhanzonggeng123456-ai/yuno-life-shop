@@ -170,3 +170,18 @@ def test_listing_batch_preserves_contract_with_constant_related_query_count():
     assert [i['id'] for i in public]==list(reversed(ids))
     assert public[-1]['photos'][0]['url']=='/uploads/cover.png'
     assert 'email' not in public[0]['seller']
+
+
+def test_native_reads_close_their_database_connections(monkeypatch):
+    user=Mobile('connections@example.jp')
+    user.listing()
+    connect=d.connect
+    opened=[]
+    class Tracked:
+        def __init__(self): self.raw=connect(); self.closed=False; opened.append(self)
+        def __getattr__(self,name): return getattr(self.raw,name)
+        def close(self): self.closed=True; self.raw.close()
+    monkeypatch.setattr(d,'connect',Tracked)
+    for path in ('/config','/listings','/me','/auctions','/market'):
+        user.get(path)
+        assert opened and all(c.closed for c in opened)
