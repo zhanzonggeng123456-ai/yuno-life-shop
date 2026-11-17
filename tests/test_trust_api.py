@@ -92,7 +92,11 @@ def test_upload_replay_creates_one_draft_and_adds_one_batch():
     did=int(first.split('/')[-1])
     for _ in range(2):
         u.post(first+'/photos/add',{'upload_key':'lost_ack_2'},files=photo)
+    u.post(first+'/details',{'name':'corrected camera','text':'new description','condition':'fair'})
+    stranger=Mobile('photo-stranger@example.jp')
+    stranger.post(first+'/details',{'name':'not mine'},expected=403)
     result=u.get(first)
+    assert result['name']=='corrected camera' and result['text']=='new description'
     assert len(result['photos'])==2
     u.post(first+'/photos/add',{'upload_key':'lost_ack_1'},files=photo,expected=409)
     with closing(d.connect()) as c:

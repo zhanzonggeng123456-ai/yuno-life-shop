@@ -2919,6 +2919,43 @@ class _PublishPageState extends State<PublishPage> with WidgetsBindingObserver {
     if (!restored && did == null && mounted) await pick(ImageSource.camera);
   }
 
+  Future<void> discardLocalDraft() async {
+    final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+              title: Text(session.tr('清除本机草稿？', '端末の下書きを削除しますか？')),
+              content: Text(session.tr(
+                  '此页尚未发布的本机修改与所选照片会被清除。已上传的服务器草稿仍可在个人中心找到。',
+                  '端末の未公開の編集と選択写真を削除します。送信済みの下書きはマイページに残ります。')),
+              actions: [
+                TextButton(
+                    onPressed: () => Navigator.pop(context, false),
+                    child: Text(session.tr('保留', '残す'))),
+                FilledButton(
+                    onPressed: () => Navigator.pop(context, true),
+                    child: Text(session.tr('清除', '削除')))
+              ],
+            ));
+    if (confirmed != true || !mounted) return;
+    setState(() {
+      busy = true;
+      published = true;
+    });
+    saveTimer?.cancel();
+    try {
+      await session.drafts.clear(draftOwner!, draftKey!);
+      if (mounted) Navigator.pop(context);
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          published = false;
+          busy = false;
+          error = failure(e);
+        });
+      }
+    }
+  }
+
   Future<XFile> keepPhoto(XFile photo) async {
     if (draftOwner == null) return photo;
     final saved = await session.drafts.keepPhoto(draftOwner!, photo);
@@ -3120,6 +3157,14 @@ class _PublishPageState extends State<PublishPage> with WidgetsBindingObserver {
     try {
       await saveDraft();
       await flushPhotos();
+      await session.post('/oneclick/$did/details', {
+        'name': name.text.trim().isEmpty
+            ? session.tr('照片中的商品', '写真の商品')
+            : name.text.trim(),
+        'text': text.text,
+        'condition': condition,
+      });
+      if (!mounted) return;
       setState(
         () => progress = session.tr('本地识别与两轴鉴定（全部为推测）…', 'ローカル認識と鑑定（すべて推測）…'),
       );
@@ -3392,6 +3437,10 @@ class _PublishPageState extends State<PublishPage> with WidgetsBindingObserver {
                 if (localPhotos.isNotEmpty)
                   Text(session.tr('待上传照片：${localPhotos.length} 张',
                       '未送信の写真：${localPhotos.length}枚')),
+                if (draftKey != null)
+                  TextButton(
+                      onPressed: busy ? null : discardLocalDraft,
+                      child: Text(session.tr('清除本机草稿', '端末の下書きを削除'))),
                 edit(name, 'name'),
                 edit(text, 'text', lines: 3),
                 FilledButton(
@@ -3673,8 +3722,17 @@ class _PublishPageState extends State<PublishPage> with WidgetsBindingObserver {
                               published = true;
                               saveTimer?.cancel();
                               if (draftKey != null) {
-                                await session.drafts
-                                    .clear(draftOwner!, draftKey!);
+                                try {
+                                  await session.drafts
+                                      .clear(draftOwner!, draftKey!);
+                                } catch (_) {
+                                  if (context.mounted) {
+                                    notify(
+                                        context,
+                                        session.tr('商品已发布，本机草稿清理未完成。',
+                                            '出品済みですが、端末の下書きを削除できませんでした。'));
+                                  }
+                                }
                               }
                               if (widget.auctionAfterPublish &&
                                   context.mounted) {

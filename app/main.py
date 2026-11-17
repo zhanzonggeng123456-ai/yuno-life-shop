@@ -1067,6 +1067,29 @@ def oneclick_photo_delete(request: Request, did: int, idx: int):
         c.close()
 
 
+@app.post("/oneclick/{did}/details")
+def oneclick_details(request: Request, did: int, name: str = Form(...),
+                     text: str = Form(""), condition: str = Form("good")):
+    user = require_user(request)
+    _check_text(name, 200, required=True)
+    _check_text(text, 5000)
+    check_content(name, text)
+    if condition not in _CONDITIONS:
+        raise HTTPException(400, "bad_condition")
+    c = conn()
+    try:
+        c.execute('BEGIN IMMEDIATE')
+        draft = _draft_or_403(c, did, user)
+        if draft["status"] == "published":
+            raise HTTPException(409, "already_published")
+        c.execute("UPDATE oneclick_drafts SET name=?,text=?,condition_grade=?,updated_at=? WHERE id=?",
+                  (name, text, condition, now_tokyo(), did))
+        c.commit()
+        return redirect(f"/oneclick/{did}", "draft_saved")
+    finally:
+        c.close()
+
+
 @app.post("/oneclick/{did}/model")
 def oneclick_model_confirm(request: Request, did: int,
                            brand: str = Form(""), model: str = Form("")):
