@@ -94,7 +94,7 @@ jobs:
             cat "$RUNNER_TEMP/native-$FLOW-api.log"
             exit 1
           fi
-          python mobile/tool/acceptance_roles.py --db "$YUNO_DB_PATH" --run-id "$RUN_ID" --lifecycle-fixtures > "$RUNNER_TEMP/native-$FLOW-roles.log" 2>&1 &
+          python mobile/tool/acceptance_roles.py --db "$YUNO_DB_PATH" --run-id "$RUN_ID" --lifecycle-fixtures --duration-seconds 2700 > "$RUNNER_TEMP/native-$FLOW-roles.log" 2>&1 &
           ROLE_PID=$!
           cd mobile
           flutter test --verbose "integration_test/${FLOW}_flow_test.dart" -d "$DEVICE_ID" --dart-define=API_BASE_URL=http://127.0.0.1:8765 --dart-define=ACCEPTANCE_RUN_ID="$RUN_ID"

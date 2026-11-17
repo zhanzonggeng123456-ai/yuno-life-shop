@@ -16,14 +16,18 @@ def main():
     parser.add_argument('--run-id', required=True)
     parser.add_argument('--lifecycle-fixtures', action='store_true',
                         help='Age only this run\'s named stock/auction fixtures')
+    parser.add_argument('--duration-seconds', type=int, default=1200,
+                        help='Fixture lifetime, 1..2700 seconds (default 1200)')
     args = parser.parse_args()
+    if not 1 <= args.duration_seconds <= 2700:
+        parser.error('Fixture lifetime must be between 1 and 2700 seconds')
     root = Path(__file__).resolve().parents[2]
     path = args.db.resolve(strict=True)
     relative = path.relative_to(root / 'data')
     if (len(relative.parts) != 2 or not relative.parts[0].startswith('acceptance-')
             or relative.parts[1] != 'yuno.db' or not args.run_id.isdecimal()):
         parser.error('Only a data/acceptance-*/yuno.db and numeric run id are allowed')
-    deadline = time.monotonic() + 1200
+    deadline = time.monotonic() + args.duration_seconds
     while time.monotonic() < deadline:
         with sqlite3.connect(path) as conn:
             for role in ('admin', 'courier', 'appraiser'):
