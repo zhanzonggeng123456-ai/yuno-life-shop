@@ -26,24 +26,52 @@ jobs:
       - name: Isolated API and current iPhone simulator flow
         run: |
           set -euo pipefail
-          RUN_ID="$(date +%s)"
-          export ACCEPTANCE_RUN_ID="$RUN_ID"
-          export YUNO_DB_PATH="$PWD/data/acceptance-$RUN_ID/yuno.db"
-          export YUNO_UPLOAD_DIR="$PWD/data/acceptance-$RUN_ID/uploads"
-          python -m uvicorn app.main:app --host 127.0.0.1 --port 8765 > "$RUNNER_TEMP/native-api.log" 2>&1 &
-          API_PID=$!
+          PROJECT_ROOT="$PWD"
+          API_PID=''
           ROLE_PID=''
-          trap 'kill "$API_PID" ${ROLE_PID:+"$ROLE_PID"} 2>/dev/null || true' EXIT
-          for attempt in $(seq 1 30); do
-            curl -fsS http://127.0.0.1:8765/api/v2/config && break
-            sleep 1
-          done
-          python mobile/tool/acceptance_roles.py --db "$YUNO_DB_PATH" --run-id "$RUN_ID" --lifecycle-fixtures > "$RUNNER_TEMP/native-roles.log" 2>&1 &
-          ROLE_PID=$!
+          DEVICE_ID=''
+          cleanup_fixture() {
+            for TEST_PID in "$ROLE_PID" "$API_PID"; do
+              if [ -n "$TEST_PID" ]; then
+                kill "$TEST_PID" 2>/dev/null || true
+                wait "$TEST_PID" 2>/dev/null || true
+              fi
+            done
+            API_PID=''
+            ROLE_PID=''
+          }
+          finish() {
+            cleanup_fixture
+            if [ -n "$DEVICE_ID" ]; then
+              xcrun simctl shutdown "$DEVICE_ID" 2>/dev/null || true
+            fi
+          }
+          trap finish EXIT
           DEVICE_ID=$(xcrun simctl list devices available -j | python -c 'import json,sys; print(next(d["udid"] for group in json.load(sys.stdin)["devices"].values() for d in group if d.get("isAvailable") and "iPhone" in d["name"]))')
           xcrun simctl boot "$DEVICE_ID" || true
           xcrun simctl bootstatus "$DEVICE_ID" -b
-          cd mobile
+          FLOW_INDEX=0
           for FLOW in native role closure settlement; do
+            FLOW_INDEX=$((FLOW_INDEX + 1))
+            RUN_ID="${GITHUB_RUN_ID}${FLOW_INDEX}"
+            export ACCEPTANCE_RUN_ID="$RUN_ID"
+            export YUNO_DB_PATH="$PROJECT_ROOT/data/acceptance-$RUN_ID/yuno.db"
+            export YUNO_UPLOAD_DIR="$PROJECT_ROOT/data/acceptance-$RUN_ID/uploads"
+            cd "$PROJECT_ROOT"
+            python -m uvicorn app.main:app --host 127.0.0.1 --port 8765 > "$RUNNER_TEMP/native-$FLOW-api.log" 2>&1 &
+            API_PID=$!
+            READY=0
+            for ATTEMPT in $(seq 1 30); do
+              if curl -fsS --max-time 3 -o /dev/null http://127.0.0.1:8765/api/v2/config; then
+                READY=1
+                break
+              fi
+              sleep 1
+            done
+            test "$READY" = 1
+            python mobile/tool/acceptance_roles.py --db "$YUNO_DB_PATH" --run-id "$RUN_ID" --lifecycle-fixtures > "$RUNNER_TEMP/native-$FLOW-roles.log" 2>&1 &
+            ROLE_PID=$!
+            cd mobile
             flutter test --verbose "integration_test/${FLOW}_flow_test.dart" -d "$DEVICE_ID" --dart-define=API_BASE_URL=http://127.0.0.1:8765 --dart-define=ACCEPTANCE_RUN_ID="$RUN_ID"
+            cleanup_fixture
           done
