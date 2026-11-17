@@ -14,6 +14,7 @@ from fastapi.responses import (HTMLResponse, JSONResponse, RedirectResponse,
                                FileResponse)
 
 from . import db as d
+from .trust import check_content, ensure_contact_allowed
 from .aijobs import create_job, get_job, start_job
 from .auctions import compute_price, min_next_bid, place_bid, settle_auction
 from .agents import (anomaly_agent, dispute_agent, inventory_agent,
@@ -161,7 +162,8 @@ def current_user(request):
         row = c.execute("SELECT * FROM sessions WHERE token=?", (token,)).fetchone()
         if not row or row["expires_at"] < now_tokyo():
             return None
-        return d.user_by_id(c, row["user_id"])
+        user = d.user_by_id(c, row["user_id"])
+        return user if user and user['is_active'] else None
     finally:
         c.close()
 
@@ -477,7 +479,7 @@ def login(request: Request, email: str = Form(...), password: str = Form(...)):
     c = conn()
     try:
         u = c.execute("SELECT * FROM users WHERE email=?", (email,)).fetchone()
-        if not u or not verify_password(password, u["salt"], u["pw_hash"]):
+        if not u or not u['is_active'] or not verify_password(password, u["salt"], u["pw_hash"]):
             check_rate_limit(_login_key, LOGIN_LIMIT, LOGIN_WINDOW)
             return redirect("/login", "invalid_login")
         tok = new_session_token()
@@ -658,6 +660,7 @@ async def listing_create(request: Request, category_slug: str = Form(...),
     _check_text(title_zh, 200)
     _check_text(desc_ja, 5000)
     _check_text(desc_zh, 5000)
+    check_content(title_ja, title_zh, desc_ja, desc_zh)
     if condition_grade not in _CONDITIONS or size_class not in _SIZE_CLASSES:
         _bad("bad condition/size")
     # 多图:新字段 images + 旧单图字段 image 兼容,第 11 张起拒绝。
@@ -955,10 +958,26 @@ placeholder="品牌、年份、状态、附件等,写得越多识别建议越准
                 request.query_params.get("msg", ""))
 
 
+def _photo_upload_replay(c, uid, key, kind, did=None):
+    if not key:
+        return None
+    import re
+    if not re.fullmatch(r'[A-Za-z0-9_-]{1,100}', key):
+        raise HTTPException(400, 'invalid_upload_key')
+    row = c.execute('SELECT kind,draft_id FROM draft_upload_requests WHERE user_id=? AND upload_key=?',
+                    (uid, key)).fetchone()
+    if row:
+        if row['kind'] != kind or (did is not None and row['draft_id'] != did):
+            raise HTTPException(409, 'upload_key_conflict')
+        return row['draft_id']
+    return None
+
+
 @app.post("/oneclick/upload")
 async def oneclick_upload(request: Request, name: str = Form(...),
                           text: str = Form(""), condition: str = Form("good"),
                           price_hint: str = Form(""),
+                          upload_key: str = Form(""),
                           photo: UploadFile = File(None),
                           photos: list[UploadFile] = File(None)):
     user = require_user(request)
@@ -967,10 +986,16 @@ async def oneclick_upload(request: Request, name: str = Form(...),
     if len(_all) > MAX_PHOTOS:
         raise HTTPException(400, f"最多{MAX_PHOTOS}张照片,已提交{len(_all)}张")
     blobs = await _read_uploads(_all)
-    _save_upload_blobs(blobs)
     fnames = [fname for fname, _data in blobs]
     c = conn()
     try:
+        c.execute('BEGIN IMMEDIATE')
+        replay = _photo_upload_replay(c, user['id'], upload_key, 'create')
+        if replay is not None:
+            return redirect(f'/oneclick/{replay}')
+        _check_text(name, 200, required=True)
+        _check_text(text, 5000)
+        _save_upload_blobs(blobs, c)
         cur = c.execute(
             "INSERT INTO oneclick_drafts(user_id,photo,name,text,condition_grade,"
             "price_hint,draft_json,status,created_at,updated_at) "
@@ -980,6 +1005,9 @@ async def oneclick_upload(request: Request, name: str = Form(...),
              json.dumps({"photos": fnames, "photo_count": len(fnames)},
                         ensure_ascii=False),
              "uploaded", now_tokyo(), now_tokyo()))
+        if upload_key:
+            c.execute('INSERT INTO draft_upload_requests VALUES(?,?,?,?)',
+                      (user['id'], upload_key, 'create', cur.lastrowid))
         c.commit()
         return redirect(f"/oneclick/{cur.lastrowid}")
     finally:
@@ -988,6 +1016,7 @@ async def oneclick_upload(request: Request, name: str = Form(...),
 
 @app.post("/oneclick/{did}/photos/add")
 async def oneclick_photo_add(request: Request, did: int,
+                             upload_key: str = Form(""),
                              photo: UploadFile = File(None),
                              photos: list[UploadFile] = File(None)):
     user = require_user(request)
@@ -996,7 +1025,11 @@ async def oneclick_photo_add(request: Request, did: int,
     blobs = await _read_uploads(_all)
     c = conn()
     try:
+        c.execute('BEGIN IMMEDIATE')
         draft = _draft_or_403(c, did, user)
+        replay = _photo_upload_replay(c, user['id'], upload_key, 'add', did)
+        if replay is not None:
+            return redirect(f'/oneclick/{replay}', 'photo_added')
         if draft["status"] == "published":
             return redirect(f"/listings/{draft['listing_id']}")
         cur_photos, _dr = _draft_photos(draft)
@@ -1004,6 +1037,9 @@ async def oneclick_photo_add(request: Request, did: int,
             raise HTTPException(400, f"最多{MAX_PHOTOS}张照片")
         _save_upload_blobs(blobs, c)
         _set_draft_photos(c, did, cur_photos + [f for f, _d in blobs], draft)
+        if upload_key:
+            c.execute('INSERT INTO draft_upload_requests VALUES(?,?,?,?)',
+                      (user['id'], upload_key, 'add', did))
         c.commit()
         return redirect(f"/oneclick/{did}", "photo_added")
     finally:
@@ -1296,6 +1332,7 @@ async def oneclick_publish(request: Request, did: int,
     _check_text(title_zh, 200)
     _check_text(desc_ja, 5000)
     _check_text(desc_zh, 5000)
+    check_content(title_ja, title_zh, desc_ja, desc_zh)
     if condition_grade not in _CONDITIONS or size_class not in _SIZE_CLASSES:
         _bad("bad condition/size")
     c = conn()
@@ -1405,6 +1442,10 @@ def ai_job_get(request: Request, jid: int):
 @app.get("/uploads/{name}")
 def serve_upload(name: str):
     from . import storage
+    from contextlib import closing
+    with closing(d.connect()) as c:
+        if c.execute('SELECT 1 FROM revoked_uploads WHERE name=?', (Path(name).name,)).fetchone():
+            raise HTTPException(404, 'not found')
     if storage.in_database():
         import mimetypes
         from fastapi.responses import Response
@@ -1412,11 +1453,12 @@ def serve_upload(name: str):
             data = storage.read(Path(name).name)
         except FileNotFoundError:
             raise HTTPException(404, "not found")
-        return Response(data, media_type=mimetypes.guess_type(name)[0] or "application/octet-stream")
+        return Response(data, media_type=mimetypes.guess_type(name)[0] or "application/octet-stream",
+                        headers={'Cache-Control': 'no-store'})
     p = d.UPLOAD_DIR / Path(name).name
     if not p.exists():
         raise HTTPException(404, "not found")
-    return FileResponse(p)
+    return FileResponse(p, headers={'Cache-Control': 'no-store'})
 
 
 # ---------------- listing detail / buy / offer ----------------
@@ -1552,6 +1594,10 @@ def listing_detail(request: Request, lid: int):
 
 
 def create_order(c, buyer_id, listing, goods_amount):
+    if listing["status"] in ("deleted", "moderation_hold"):
+        raise HTTPException(409, "listing_unavailable")
+    if listing["seller_id"]:
+        ensure_contact_allowed(c, buyer_id, listing["seller_id"])
     is_platform = 1 if listing["is_platform_owned"] else 0
     comm = commission_for(c, goods_amount, is_platform)
     fee, needs_quote, _ = delivery_fee(c, listing["size_class"],
@@ -1585,6 +1631,8 @@ def buy(request: Request, lid: int):
             return redirect("/", "not_available")
         if r["seller_id"] and r["seller_id"] == user["id"]:
             return redirect(f"/listings/{lid}", "own_listing")
+        if r['seller_id']:
+            ensure_contact_allowed(c, user['id'], r['seller_id'])
         hv = c.execute("SELECT appraisal_status FROM hv_reviews WHERE listing_id=?",
                        (lid,)).fetchone()
         if hv and hv["appraisal_status"] != "approved":
@@ -1606,6 +1654,8 @@ def offer(request: Request, lid: int, amount: int = Form(...)):
         r = c.execute("SELECT * FROM listings WHERE id=?", (lid,)).fetchone()
         if not r or r["status"] != "active" or r["seller_id"] == user["id"]:
             return redirect(f"/listings/{lid}", "cannot_offer")
+        if r['seller_id']:
+            ensure_contact_allowed(c, user['id'], r['seller_id'])
         hv = c.execute("SELECT appraisal_status FROM hv_reviews WHERE listing_id=?",
                        (lid,)).fetchone()
         if hv and hv["appraisal_status"] != "approved":
@@ -1735,6 +1785,7 @@ def thread_post(request: Request, lid: int, buyer_id: int,
                 body: str = Form(...), receiver_id: int = Form(...)):
     user = require_user(request)
     _check_text(body, 5000, required=True)
+    check_content(body)
     c = conn()
     try:
         listing = c.execute("SELECT * FROM listings WHERE id=?", (lid,)).fetchone()
@@ -1744,6 +1795,7 @@ def thread_post(request: Request, lid: int, buyer_id: int,
         expected = listing["seller_id"] if user["id"] == buyer_id else buyer_id
         if receiver_id != expected:
             raise HTTPException(403, "forbidden")
+        ensure_contact_allowed(c, user['id'], receiver_id)
         c.execute("INSERT INTO messages(listing_id,buyer_id,sender_id,receiver_id,"
                   "body,created_at) VALUES(?,?,?,?,?,?)",
                   (lid, buyer_id, user["id"], receiver_id, body, now_tokyo()))
@@ -2636,6 +2688,10 @@ def auction_bid(request: Request, aid: int, amount: int = Form(...),
             raise HTTPException(404, "not found")
         listing = c.execute("SELECT * FROM listings WHERE id=?",
                             (a["listing_id"],)).fetchone()
+        if listing["status"] in ("deleted", "moderation_hold"):
+            raise HTTPException(409, "listing_unavailable")
+        if listing["seller_id"]:
+            ensure_contact_allowed(c, user["id"], listing["seller_id"])
         if listing["seller_id"] == user["id"]:
             return redirect(f"/auctions/{aid}", "own_listing")
         ok, msg, _ = place_bid(c, a, user["id"], amount,
@@ -2660,7 +2716,11 @@ def auction_deposit(request: Request, aid: int):
         # 且仅在拍卖进行中、要求保证金时才可交。
         listing = c.execute("SELECT * FROM listings WHERE id=?",
                             (a["listing_id"],)).fetchone()
-        if listing and listing["seller_id"] == user["id"]:
+        if not listing or listing["status"] in ("deleted", "moderation_hold"):
+            raise HTTPException(409, "listing_unavailable")
+        if listing["seller_id"]:
+            ensure_contact_allowed(c, user["id"], listing["seller_id"])
+        if listing["seller_id"] == user["id"]:
             return redirect(f"/auctions/{aid}", "own_listing")
         if a["status"] != "active" or not a["deposit_required"]:
             return redirect(f"/auctions/{aid}", "deposit_not_required")
@@ -2688,6 +2748,10 @@ def auction_buy_now(request: Request, aid: int):
             return redirect(f"/auctions/{aid}", "no_buy_now")
         listing = c.execute("SELECT * FROM listings WHERE id=?",
                             (a["listing_id"],)).fetchone()
+        if listing["status"] in ("deleted", "moderation_hold"):
+            raise HTTPException(409, "listing_unavailable")
+        if listing["seller_id"]:
+            ensure_contact_allowed(c, user["id"], listing["seller_id"])
         if listing["seller_id"] == user["id"]:
             return redirect(f"/auctions/{aid}", "own_listing")
         oid, err = create_order(c, user["id"], listing, a["buy_now_price"])
@@ -3510,11 +3574,10 @@ def terms_page(request: Request):
 def privacy_page(request: Request):
     return _rules_page(
         request, "privacy", "プライバシーポリシー", "隐私",
-        "<p>登録情報(メールアドレス・表示名・電話番号)は取引連絡と"
-        "アカウント管理にのみ使います。写真と商品情報はローカルに保存され、"
-        "有料の外部 API には送信されません。</p>",
-        "<p>注册信息(邮箱、昵称、手机号)仅用于交易联系与账号管理。"
-        "照片与商品信息保存在本地，不会发送给任何付费外部 API。</p>")
+        "<p>登録情報はアカウント管理・取引連絡に使用します。商品情報と写真はサーバーに保存され、公開商品の写真は他の利用者も閲覧できます。端末には未送信の出品下書きと写真が保存されます。復旧コードはハッシュで保管します。</p>"
+        "<p>退会はアカウント安全から申請できます。プロフィールを匿名化し、所有する商品写真へのアクセスを停止します。取引・監査記録は保持され、バックアップからの即時消去は保証しません。</p>",
+        "<p>注册信息用于账号管理和交易联系。商品信息和照片保存在服务器，公开商品照片可被其他用户查看；未上传的发布草稿与照片保存在本机。恢复码仅保存哈希。</p>"
+        "<p>可在账号安全中删除账号：个人资料匿名化，停止访问所属商品照片。必要的交易与审计记录保留，备份不保证即时清除。</p>")
 
 
 @app.get("/returns")
@@ -3917,5 +3980,7 @@ def me_extra(request: Request):
 
 
 # Native mobile boundary; existing HTML routes and business logic stay intact.
+from .trust_api import router as trust_router
+app.include_router(trust_router)
 from .api_v2 import router as mobile_api_router
 app.include_router(mobile_api_router)

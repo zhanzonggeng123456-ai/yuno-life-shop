@@ -5,6 +5,7 @@ so validation, role checks, audits, rate limits and payment semantics stay share
 No HTML is returned to, parsed by, or rendered in the mobile application.
 """
 import json
+import os
 import re
 from http.cookies import SimpleCookie
 from urllib.parse import parse_qs, urlsplit
@@ -23,6 +24,7 @@ from .mobile_overview import marketplace_overview
 from .aijobs import get_job
 from .auctions import compute_price, min_next_bid
 from .oneclick import detail_checklist_for
+from .trust import blocked
 
 
 class JsonRoute(APIRoute):
@@ -50,7 +52,7 @@ def user(request, optional=False):
         raise HTTPException(401,'login_required')
     token=header[7:]
     with d.connect() as c:
-        row=c.execute('SELECT u.* FROM users u JOIN sessions s ON s.user_id=u.id WHERE s.token=? AND s.expires_at>=?',(token,now_tokyo())).fetchone()
+        row=c.execute('SELECT u.* FROM users u JOIN sessions s ON s.user_id=u.id WHERE s.token=? AND s.expires_at>=? AND u.is_active=1',(token,now_tokyo())).fetchone()
     if not row: raise HTTPException(401,'session_expired')
     return row
 
@@ -114,7 +116,7 @@ def config():
         services=d.effective_service_prices(d.get_setting(c,'service_prices'))
         commission=legacy.commission_rate(c)
         delivery_rules=json.loads(d.get_setting(c,'delivery_rules') or '{}')
-    return {'name':'Yuno Life','currency':'JPY','timezone':'Asia/Tokyo','max_photos':10,
+    return {'support_email':os.environ.get('YUNO_SUPPORT_EMAIL',''),'name':'Yuno Life','currency':'JPY','timezone':'Asia/Tokyo','max_photos':10,
             'categories':categories,'regions':regions,'services':services,'commission_rate':commission,'delivery_rules':delivery_rules,'simulated':True,
             'languages':['system','zh','ja'],'valuation_disclaimer':'此报价为AI根据现实数据做出的估价，用户可以根据自身另行填写'}
 
@@ -122,6 +124,7 @@ def config():
 @router.get('/listings')
 def listings(request:Request,q:str='',category:str='',region:str='',price_min:int=0,price_max:int=1000000000,only_platform:bool=False):
     if price_min<0 or price_max<price_min: raise HTTPException(400,'bad_price_filter')
+    u=user(request,True)
     with d.connect() as c:
         sql="SELECT l.* FROM listings l JOIN categories cat ON cat.id=l.category_id WHERE l.status='active' AND l.price BETWEEN ? AND ?"
         args=[price_min,price_max]
@@ -130,6 +133,9 @@ def listings(request:Request,q:str='',category:str='',region:str='',price_min:in
         if category: sql+=' AND cat.slug=?';args.append(category)
         if region: sql+=' AND l.region=?';args.append(region)
         if only_platform: sql+=' AND l.is_platform_owned=1'
+        if u:
+            sql+=' AND NOT EXISTS (SELECT 1 FROM user_blocks b WHERE (b.user_id=? AND b.blocked_id=l.seller_id) OR (b.blocked_id=? AND b.user_id=l.seller_id))'
+            args += [u['id'],u['id']]
         sql+=' ORDER BY l.is_featured DESC,l.id DESC LIMIT 200'
         return {'items':[listing(c,r) for r in c.execute(sql,args)]}
 
@@ -140,6 +146,8 @@ def listing_detail(request:Request,lid:int):
     with d.connect() as c:
         row=c.execute('SELECT * FROM listings WHERE id=?',(lid,)).fetchone()
         if not row: raise HTTPException(404,'not_found')
+        if (row['status'] in ('moderation_hold','deleted') and not (u and (can_operate(u) or u['id']==row['seller_id']))) or (u and blocked(c,u['id'],row['seller_id'])):
+            raise HTTPException(404,'not_found')
         out=listing(c,row)
         out['category']=clean(d.category_by_id(c,row['category_id']))
         out['review']=clean(c.execute('SELECT * FROM hv_reviews WHERE listing_id=?',(lid,)).fetchone())
@@ -173,6 +181,7 @@ def me(request:Request):
             order['listing']=listing(c,row) if row else None
         out['offers']=[clean(r) for r in c.execute('SELECT o.* FROM offers o JOIN listings l ON l.id=o.listing_id WHERE o.buyer_id=? OR l.seller_id=? ORDER BY o.id DESC',(u['id'],u['id']))]
         out['threads']=[dict(r) for r in c.execute('SELECT DISTINCT m.listing_id,m.buyer_id,l.title_ja,l.title_zh FROM messages m JOIN listings l ON l.id=m.listing_id WHERE m.buyer_id=? OR l.seller_id=?',(u['id'],u['id']))]
+        out['following']=[r for r in out['following'] if r['status']=='active' and not blocked(c,u['id'],r['seller_id'])]
         out['deliveries']=[clean(r) for r in c.execute('SELECT dl.* FROM deliveries dl JOIN orders o ON o.id=dl.order_id WHERE o.buyer_id=? OR o.seller_id=? OR dl.courier_id=? ORDER BY dl.id DESC',(u['id'],u['id'],u['id']))]
         if u['role']=='courier':
             out['deliveries']=[clean(r) for r in c.execute("SELECT * FROM deliveries WHERE status='requested' OR courier_id=? ORDER BY id DESC",(u['id'],))]
@@ -192,9 +201,11 @@ def market():
 
 
 @router.get('/auctions')
-def auctions():
+def auctions(request:Request):
+    u=user(request,True)
     with d.connect() as c:
-        return {'items':[clean(r) for r in c.execute('SELECT a.*,l.title_ja,l.title_zh FROM auctions a JOIN listings l ON l.id=a.listing_id ORDER BY a.id DESC')]}
+        rows=c.execute("SELECT a.*,l.title_ja,l.title_zh,l.seller_id FROM auctions a JOIN listings l ON l.id=a.listing_id WHERE l.status NOT IN ('deleted','moderation_hold') ORDER BY a.id DESC")
+        return {'items':[clean(r) for r in rows if not u or not blocked(c,u['id'],r['seller_id'])]}
 
 
 @router.get('/ai-jobs/{jid}')
@@ -227,6 +238,7 @@ def messages(request:Request,lid:int,bid:int):
         if not row or u['id'] not in (bid,row['seller_id']): raise HTTPException(403,'forbidden')
         return {'items':[clean(r) for r in c.execute('SELECT m.*,u.display_name FROM messages m JOIN users u ON u.id=m.sender_id WHERE listing_id=? AND buyer_id=? ORDER BY m.id',(lid,bid))],
                 'receiver_id':row['seller_id'] if u['id']==bid else bid,
+                'blocked':blocked(c,u['id'],row['seller_id'] if u['id']==bid else bid),
                 'action':command(f'/messages/{lid}/{bid}','发送','送信')}
 
 
@@ -270,6 +282,8 @@ def detail(request:Request,resource:str,rid:int):
             return {k:row[k] for k in PUBLIC_FIELDS} | {'reviews':[clean(r) for r in c.execute('SELECT * FROM reviews WHERE reviewee_id=?',(rid,))]}
         if resource=='auctions':
             item=c.execute('SELECT * FROM listings WHERE id=?',(row['listing_id'],)).fetchone()
+            if not item or item['status'] in ('deleted','moderation_hold') or (u and blocked(c,u['id'],item['seller_id'])):
+                raise HTTPException(404,'not_found')
             bids=c.execute('SELECT * FROM bids WHERE auction_id=? ORDER BY id',(rid,)).fetchall()
             price,leader=compute_price(row,bids)
             out.update({'listing':listing(c,item),'current_price':price,'leader_id':leader,'minimum_bid':min_next_bid(row,bids),'bids':[{'id':b['id'],'bidder_id':b['bidder_id'],'amount':b['amount'],'created_at':b['created_at']} for b in bids]})
@@ -336,7 +350,7 @@ def rules():
     # Public rule content, kept aligned with the existing legal pages.
     return {'items':[
       {'key':'terms','zh':'条款：平台以坂户市为起点，价格含税。卖家对描述负责，禁止虚假描述。支付和配送均为模拟，不产生真实扣款。','ja':'利用規約：坂戸市を起点に提供。表示価格は税込。出品者は説明に責任を負います。決済・配送は模擬です。'},
-      {'key':'privacy','zh':'隐私：注册信息仅用于交易联系和账号管理。照片与商品信息本地保存，不发送给付费 API。','ja':'プライバシー：登録情報は取引連絡とアカウント管理に使用。写真はローカル保存、有料APIへ送信しません。'},
+      {'key':'privacy','zh':'隐私：注册信息仅用于交易联系和账号管理。商品信息与照片保存在服务器，公开商品照片可被他人查看；本机保存发布草稿。账号安全中可删除账号，必要的交易、审计及备份记录可能保留。','ja':'プライバシー：登録情報は取引連絡とアカウント管理に使用。商品・写真はサーバー保存、公開商品の写真は他の利用者も閲覧できます。端末に下書きを保存。退会はアカウント安全から行えます。取引・監査・バックアップ記録は保持される場合があります。'},
       {'key':'returns','zh':'退货争议：订单页申请退款或争议，由运营人工裁决，结果与审计记录可查询。','ja':'返品・紛争：注文から申請。運営が手動で判断し、結果を記録します。'},
       {'key':'prohibited','zh':'禁售：违法物品、赃物、假冒伪造商品、危险品、依法禁止交易的物品。','ja':'禁止物：違法品、盗品、偽造品、危険物、法令上取引禁止の物品。'}]}
 

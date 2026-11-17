@@ -25,3 +25,7 @@
 4. 真实支付、物流、付费模型和应用商店发布明确不在本轮交付范围。不能以“整个 App”为由擅自启用这些外部服务。
 
 原始结果与版本见 [NATIVE_ACCEPTANCE.md](NATIVE_ACCEPTANCE.md)，启动和隔离测试方法见 [NATIVE_APP.md](NATIVE_APP.md)。
+
+## 0.5.0（14）优化候选
+
+新增易用性与信任功能的范围、验证及发布顺序见 [0.5.0 记录](USABILITY_TRUST_050.md)。源码候选测试不替代 TestFlight 更新或新版本真机验收；历史硬件证据保留原版本归属。

@@ -5,6 +5,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'draft_store.dart';
 
 typedef Json = Map<String, dynamic>;
 
@@ -18,7 +19,10 @@ class ApiError implements Exception {
 
 class Session extends ChangeNotifier {
   http.Client client;
-  Session({http.Client? client}) : client = client ?? http.Client();
+  final DraftStore drafts;
+  Session({http.Client? client, DraftStore? drafts})
+      : client = client ?? http.Client(),
+        drafts = drafts ?? DraftStore();
   final storage = const FlutterSecureStorage(
     iOptions: IOSOptions(
       accessibility: KeychainAccessibility.first_unlock_this_device,
@@ -131,6 +135,22 @@ class Session extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<bool> deleteAccount(String password) async {
+    final uid = me?['id'] as int?;
+    await post(
+        '/account/delete', {'password': password, 'confirmation': 'DELETE'});
+    var cleaned = true;
+    try {
+      if (uid != null) await drafts.clearAccount(baseUrl, uid);
+    } catch (_) {
+      cleaned =
+          false; // The server deletion succeeded; report local cleanup separately.
+    } finally {
+      await clearIdentity();
+    }
+    return cleaned;
+  }
+
   Uri uri(String path) => Uri.parse('$baseUrl/api/v2$path');
   Map<String, String> get headers => {
         'Accept': 'application/json',
@@ -199,7 +219,7 @@ class Session extends ChangeNotifier {
     return decode(
       await http.Response.fromStream(
         await client.send(request).timeout(const Duration(seconds: 45)),
-      ),
+      ).timeout(const Duration(seconds: 45)),
     );
   }
 }
