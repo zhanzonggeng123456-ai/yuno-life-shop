@@ -3271,6 +3271,7 @@ class _PublishPageState extends State<PublishPage> with WidgetsBindingObserver {
   }
 
   Widget photoTile(int index, bool remote) {
+    final position = remote ? index : remotePhotos.length + index;
     final body = remote
         ? imageView(remotePhotos[index]['url'], height: 150, width: 150)
         : Image.file(
@@ -3313,7 +3314,7 @@ class _PublishPageState extends State<PublishPage> with WidgetsBindingObserver {
             children: [
               Expanded(
                 child: Text(
-                  index == 0 ? session.tr('封面', 'カバー') : '#${index + 1}',
+                  position == 0 ? session.tr('封面', 'カバー') : '#${position + 1}',
                 ),
               ),
               PopupMenuButton<String>(
@@ -3344,7 +3345,8 @@ class _PublishPageState extends State<PublishPage> with WidgetsBindingObserver {
                     ['retake', session.tr('重拍', '撮り直し')],
                     ['delete', session.tr('删除', '削除')],
                   ])
-                    PopupMenuItem(value: pair[0], child: Text(pair[1])),
+                    if (remote || remotePhotos.isEmpty || pair[0] != 'cover')
+                      PopupMenuItem(value: pair[0], child: Text(pair[1])),
                 ],
               ),
             ],

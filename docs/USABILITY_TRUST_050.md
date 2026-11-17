@@ -24,7 +24,7 @@
 
 - SQLite 后端：144 项通过（含安全、上传及批量读取回归）。日志 outputs/deep-optimization-backend.log。
 - 官方 libSQL 本地驱动：144 项通过，日志 outputs/deep-optimization-backend-libsql.log；安全功能也在数据库照片模式验证，非真实 Turso 生产写入。
-- Flutter 静态检查无问题，38 项组件/单元回归通过：见 outputs/deep-optimization-analyze.log、outputs/deep-optimization-flutter.log。草稿测试验证临时选图删除后持久照片仍可恢复、最新快照顺序、跨服务器/账号隔离和清理目录边界；账号删除、恢复表单、启动延迟与交易中日文说明均有测试。
+- Flutter 静态检查无问题，39 项组件/单元回归通过：见 outputs/deep-optimization-analyze.log、outputs/deep-optimization-flutter.log。草稿测试验证临时选图删除后持久照片仍可恢复、最新快照顺序、跨服务器/账号隔离和清理目录边界；账号删除、恢复表单、启动延迟与交易中日文说明均有测试。
 - 本轮没有复用历史硬件结果声称已测新版本的相机/HEIF/系统键盘。仍需新候选实际设备烟测后记录结果。
 - 新客户端依赖新增 /api/v2/account/*、/reports 和 /admin/reports 接口。发布顺序：通过 CI 后先备份并部署兼容后端，验证只读健康与接口，再签名和上传客户端。旧 v1/v2 与现有客户端保留兼容。
 - 草稿照片依赖手机系统的 App 沙箱保护；安全存储不等于自行加密所有图片。已被他人下载或缓存的公开图片不能通过删号远程擦除。举报队列需要实际运营人员处理，不宣称全天候响应。
